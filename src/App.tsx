@@ -265,6 +265,7 @@ const App = () => {
         }}
         onDeleteTemplate={templates.deleteTemplate}
         onAddProject={templates.addProject}
+        onDeleteProject={templates.deleteProject}
         onRenameProject={templates.renameProject}
         onAddCategory={templates.addCategory}
         onRenameCategory={templates.renameCategory}

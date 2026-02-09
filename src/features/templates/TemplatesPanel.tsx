@@ -34,6 +34,7 @@ export type TemplatesPanelProps = {
   onAddCategory: (project: string, category: string) => void;
   onRenameCategory: (project: string, from: string, to: string) => void;
   onDeleteCategory: (project: string, category: string) => void;
+  onDeleteProject: (project: string) => void;
   defaultCategory: string;
   hasRoot: boolean;
   templatesCount: number;
@@ -63,6 +64,7 @@ const TemplatesPanel = ({
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
+  onDeleteProject,
   defaultCategory,
   hasRoot,
   templatesCount,
@@ -83,6 +85,8 @@ const TemplatesPanel = ({
   const [renameProjectInfo, setRenameProjectInfo] = useState<string | null>(null);
   const [blockedDeleteInfo, setBlockedDeleteInfo] = useState<{ project: string; category: string } | null>(null);
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<{ project: string; category: string } | null>(null);
+  const [blockedDeleteProject, setBlockedDeleteProject] = useState<string | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
   const originalRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const lastSavedRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -302,31 +306,50 @@ const TemplatesPanel = ({
                 <span className="project-count">
                   {t('templates.projectCount', { count: totalCount })}
                 </span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title={t('templates.renameProjectButtonTitle')}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (isProjectDefault) return;
-                    setRenameProjectInfo(project);
-                    setRenameProjectName(project);
-                  }}
-                  disabled={isProjectDefault}
-                >
-                  ✎
-                </button>
-                <button
-                  type="button"
-                  className="button ghost compact"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setAddCategoryProject(project);
-                    setAddCategoryName('');
-                  }}
-                >
-                  {t('templates.addCategory')}
-                </button>
+                <div className="category-actions">
+                  <button
+                    type="button"
+                    className="button ghost compact"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setAddCategoryProject(project);
+                      setAddCategoryName('');
+                    }}
+                  >
+                    {t('templates.addCategory')}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title={t('templates.renameProjectButtonTitle')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (isProjectDefault) return;
+                      setRenameProjectInfo(project);
+                      setRenameProjectName(project);
+                    }}
+                    disabled={isProjectDefault}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn danger"
+                    title={t('templates.deleteProjectButtonTitle')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (isProjectDefault) return;
+                      if (totalCount > 0) {
+                        setBlockedDeleteProject(project);
+                        return;
+                      }
+                      setConfirmDeleteProject(project);
+                    }}
+                    disabled={isProjectDefault}
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
               {isOpen && (
                 <div className="category-accordion">
@@ -661,6 +684,41 @@ const TemplatesPanel = ({
             </div>
           </>,
           () => setConfirmDeleteCategory(null),
+        )}
+      {blockedDeleteProject &&
+        renderModal(
+          <>
+            <h3>{t('templates.blockedDeleteTitle')}</h3>
+            <p>{t('templates.blockedDeleteProjectMessage')}</p>
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setBlockedDeleteProject(null)}>
+                {t('common.ok')}
+              </button>
+            </div>
+          </>,
+          () => setBlockedDeleteProject(null),
+        )}
+      {confirmDeleteProject &&
+        renderModal(
+          <>
+            <h3>{t('templates.deleteProjectConfirmTitle')}</h3>
+            <p>{t('templates.deleteConfirmMessage')}</p>
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setConfirmDeleteProject(null)}>
+                {t('templates.modalCancel')}
+              </button>
+              <button
+                className="button danger"
+                onClick={() => {
+                  onDeleteProject(confirmDeleteProject);
+                  setConfirmDeleteProject(null);
+                }}
+              >
+                {t('templates.modalDelete')}
+              </button>
+            </div>
+          </>,
+          () => setConfirmDeleteProject(null),
         )}
       {confirmDeleteId &&
         renderModal(

@@ -23,6 +23,7 @@ export const translations = {
     'templates.defaultCategory': 'Ogólne',
     'templates.renameProjectTitle': 'Zmień nazwę projektu',
     'templates.renameProjectButtonTitle': 'Zmień nazwę projektu',
+    'templates.deleteProjectButtonTitle': 'Usuń projekt',
     'templates.addCategory': 'Dodaj kategorię',
     'templates.renameCategoryTitle': 'Zmień nazwę kategorii',
     'templates.renameCategoryButtonTitle': 'Zmień nazwę',
@@ -36,7 +37,10 @@ export const translations = {
     'templates.blockedDeleteTitle': 'Nie można usunąć',
     'templates.blockedDeleteMessage':
       'Ta kategoria ma przypisane interfejsy. Usuń je lub przenieś do innej kategorii.',
+    'templates.blockedDeleteProjectMessage':
+      'Ten projekt ma przypisane interfejsy. Usuń je lub przenieś do innego projektu.',
     'templates.deleteCategoryConfirmTitle': 'Usunąć kategorię?',
+    'templates.deleteProjectConfirmTitle': 'Usunąć projekt?',
     'templates.deleteTemplateConfirmTitle': 'Usunąć szablon?',
     'templates.deleteConfirmMessage': 'Ta operacja jest nieodwracalna.',
     'templates.load': 'Wczytaj',
@@ -139,6 +143,7 @@ export const translations = {
     'templates.defaultCategory': 'General',
     'templates.renameProjectTitle': 'Rename project',
     'templates.renameProjectButtonTitle': 'Rename project',
+    'templates.deleteProjectButtonTitle': 'Delete project',
     'templates.addCategory': 'Add category',
     'templates.renameCategoryTitle': 'Rename category',
     'templates.renameCategoryButtonTitle': 'Rename',
@@ -152,7 +157,10 @@ export const translations = {
     'templates.blockedDeleteTitle': 'Cannot delete',
     'templates.blockedDeleteMessage':
       'This category has assigned interfaces. Remove them or move to another category.',
+    'templates.blockedDeleteProjectMessage':
+      'This project has assigned interfaces. Remove them or move to another project.',
     'templates.deleteCategoryConfirmTitle': 'Delete category?',
+    'templates.deleteProjectConfirmTitle': 'Delete project?',
     'templates.deleteTemplateConfirmTitle': 'Delete template?',
     'templates.deleteConfirmMessage': 'This action cannot be undone.',
     'templates.load': 'Load',

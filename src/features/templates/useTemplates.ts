@@ -325,6 +325,32 @@ const useTemplates = ({
     persistCategories(next);
   };
 
+  const deleteProject = (project: string) => {
+    const trimmed = project.trim();
+    if (!trimmed) return;
+    if (trimmed === NO_PROJECT) return;
+    const hasTemplates = templates.some((tpl) => tpl.project?.trim() === trimmed);
+    if (hasTemplates) return;
+
+    const nextProjects = projects.filter((p) => p !== trimmed);
+    setProjects(nextProjects);
+    persistProjects(nextProjects);
+
+    const nextCategories: Record<string, string[]> = { ...categoriesMap };
+    if (nextCategories[trimmed]) {
+      delete nextCategories[trimmed];
+      setCategoriesMap(nextCategories);
+      persistCategories(nextCategories);
+    }
+
+    if (projectFilter === trimmed) {
+      setProjectFilter('');
+    }
+    if (projectName === trimmed) {
+      setProjectName('');
+    }
+  };
+
   const renameProject = (from: string, to: string) => {
     const trimmed = to.trim();
     if (!trimmed) return;
@@ -460,6 +486,7 @@ const useTemplates = ({
     addCategory,
     renameCategory,
     deleteCategory,
+    deleteProject,
     renameProject,
     categoriesMap,
     templatesByProject,
