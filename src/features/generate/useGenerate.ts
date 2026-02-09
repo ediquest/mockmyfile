@@ -1,5 +1,6 @@
 ﻿import JSZip from 'jszip';
 import { useMemo } from 'react';
+import { useI18n } from '../../i18n/I18nProvider';
 import type { FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { escapeXml } from '../../core/xml/escape';
 import { toIsoDate } from '../../core/xml/utils';
@@ -24,6 +25,7 @@ const useGenerate = ({
   filesToGenerate,
   setStatus,
 }: UseGenerateArgs) => {
+  const { t } = useI18n();
   const relationByDependent = useMemo(() => {
     const map = new Map<string, Relation>();
     for (const rel of relations) {
@@ -59,13 +61,14 @@ const useGenerate = ({
     fileIndex: number,
     loopIndexMap: Record<string, number>,
     cache: Map<string, string>,
+    usedValues: Map<string, Set<string>>,
   ): string => {
     const cacheKey = `${templateId}::${fileIndex}::${JSON.stringify(loopIndexMap)}`;
     if (cache.has(cacheKey)) return cache.get(cacheKey)!;
 
     const rel = relationByDependent.get(templateId);
     if (rel) {
-      const masterValue = resolveValue(rel.masterId, fileIndex, loopIndexMap, cache);
+      const masterValue = resolveValue(rel.masterId, fileIndex, loopIndexMap, cache, usedValues);
       const value = `${rel.prefix}${masterValue}${rel.suffix}`;
       cache.set(cacheKey, value);
       return value;
@@ -75,6 +78,52 @@ const useGenerate = ({
     if (!field) return '';
 
     const indexOffset = fileIndex + Object.values(loopIndexMap).reduce((a, b) => a + b, 0);
+    const usedSet = (() => {
+      if (!usedValues.has(field.id)) {
+        usedValues.set(field.id, new Set<string>());
+      }
+      return usedValues.get(field.id)!;
+    })();
+
+    const getMaxUnique = () => {
+      if (field.kind === 'number') {
+        if (field.length > 0) {
+          const digits = Math.max(1, Math.floor(field.length));
+          return Math.pow(10, digits);
+        }
+        const min = Math.min(field.min, field.max);
+        const max = Math.max(field.min, field.max);
+        return Math.max(0, max - min + 1);
+      }
+      if (field.kind === 'date') {
+        return Math.max(1, field.dateSpanDays);
+      }
+      if (field.kind === 'text') {
+        const length = Math.max(4, field.length);
+        const alphabet = 32;
+        const val = Math.pow(alphabet, length);
+        return Number.isFinite(val) ? val : null;
+      }
+      return null;
+    };
+
+    const pickUnique = (generator: () => string) => {
+      const maxUnique = getMaxUnique();
+      if (typeof maxUnique === 'number' && maxUnique > 0 && usedSet.size >= maxUnique) {
+        throw new Error(t('status.uniqueValuesError', { field: field.label }));
+      }
+      const attempts = typeof maxUnique === 'number' && maxUnique > 0
+        ? Math.min(10000, Math.ceil(maxUnique * 2))
+        : 10000;
+      for (let i = 0; i < attempts; i += 1) {
+        const candidate = generator();
+        if (!usedSet.has(candidate)) {
+          usedSet.add(candidate);
+          return candidate;
+        }
+      }
+      throw new Error(t('status.uniqueValuesError', { field: field.label }));
+    };
     let value = field.value;
     if (field.mode === 'fixed') {
       value = field.fixedValue;
@@ -90,34 +139,39 @@ const useGenerate = ({
       }
     } else if (field.mode === 'random') {
       if (field.kind === 'number') {
-        if (field.length > 0) {
-          const digits = Math.max(1, Math.floor(field.length));
-          let out = '';
-          for (let i = 0; i < digits; i += 1) {
-            out += Math.floor(Math.random() * 10).toString();
+        value = pickUnique(() => {
+          if (field.length > 0) {
+            const digits = Math.max(1, Math.floor(field.length));
+            let out = '';
+            for (let i = 0; i < digits; i += 1) {
+              out += Math.floor(Math.random() * 10).toString();
+            }
+            return out;
           }
-          value = out;
-        } else {
           const min = Math.min(field.min, field.max);
           const max = Math.max(field.min, field.max);
           const rand = Math.floor(min + Math.random() * (max - min + 1));
-          value = String(rand);
-        }
+          return String(rand);
+        });
       } else if (field.kind === 'date') {
-        const baseDate = new Date(field.value);
-        const span = Math.max(1, field.dateSpanDays);
-        const offset = Math.floor(Math.random() * span);
-        const next = new Date(baseDate);
-        next.setDate(baseDate.getDate() + offset);
-        value = toIsoDate(next);
+        value = pickUnique(() => {
+          const baseDate = new Date(field.value);
+          const span = Math.max(1, field.dateSpanDays);
+          const offset = Math.floor(Math.random() * span);
+          const next = new Date(baseDate);
+          next.setDate(baseDate.getDate() + offset);
+          return toIsoDate(next);
+        });
       } else {
-        const length = Math.max(4, field.length);
-        const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let out = '';
-        for (let i = 0; i < length; i += 1) {
-          out += alphabet[Math.floor(Math.random() * alphabet.length)];
-        }
-        value = out;
+        value = pickUnique(() => {
+          const length = Math.max(4, field.length);
+          const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          let out = '';
+          for (let i = 0; i < length; i += 1) {
+            out += alphabet[Math.floor(Math.random() * alphabet.length)];
+          }
+          return out;
+        });
       }
     }
 
@@ -131,6 +185,7 @@ const useGenerate = ({
     fileIndex: number,
     loopIndexMap: Record<string, number>,
     cache: Map<string, string>,
+    usedValues: Map<string, Set<string>>,
   ): string => {
     const templatePath = normalizeId(path.replace(/\[\d+\]/g, '[]'));
     const attrs = node.attrs
@@ -138,7 +193,7 @@ const useGenerate = ({
         const attrId = `${templatePath}/@${attr.name}`;
         const field = getFieldEntry(attrId);
         const value = field
-          ? resolveValue(field.id, fileIndex, loopIndexMap, cache)
+          ? resolveValue(field.id, fileIndex, loopIndexMap, cache, usedValues)
           : attr.value;
         return ` ${attr.name}="${escapeXml(value)}"`;
       })
@@ -147,7 +202,7 @@ const useGenerate = ({
     if (node.children.length === 0) {
       const field = getFieldEntry(templatePath);
       const value = field
-        ? resolveValue(field.id, fileIndex, loopIndexMap, cache)
+        ? resolveValue(field.id, fileIndex, loopIndexMap, cache, usedValues)
         : node.text ?? '';
       return `<${node.tag}${attrs}>${escapeXml(value)}</${node.tag}>`;
     }
@@ -167,12 +222,13 @@ const useGenerate = ({
                 fileIndex,
                 nextLoop,
                 cache,
+                usedValues,
               ),
             );
           }
           return pieces.join('');
         }
-        return serializeNode(child, `${path}/${child.tag}`, fileIndex, loopIndexMap, cache);
+        return serializeNode(child, `${path}/${child.tag}`, fileIndex, loopIndexMap, cache, usedValues);
       })
       .join('');
 
@@ -181,23 +237,29 @@ const useGenerate = ({
 
   const generateZip = async () => {
     if (!root) return;
-    const zip = new JSZip();
-    const baseName = getBaseName(fileName || 'message');
-    for (let i = 0; i < filesToGenerate; i += 1) {
-      const cache = new Map<string, string>();
-      const content = serializeNode(root, `/${root.tag}`, i, {}, cache);
-      const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
-      const fileLabel = `${baseName}_${i + 1}.xml`;
-      zip.file(fileLabel, xml);
+    try {
+      const zip = new JSZip();
+      const baseName = getBaseName(fileName || 'message');
+      const usedValues = new Map<string, Set<string>>();
+      for (let i = 0; i < filesToGenerate; i += 1) {
+        const cache = new Map<string, string>();
+        const content = serializeNode(root, `/${root.tag}`, i, {}, cache, usedValues);
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
+        const fileLabel = `${baseName}_${i + 1}.xml`;
+        zip.file(fileLabel, xml);
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseName}_generated.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus(t('status.generateSuccess', { count: filesToGenerate }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('status.generateFailed');
+      setStatus(message);
     }
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${baseName}_generated.zip`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatus(`Wygenerowano ZIP z ${filesToGenerate} plikami.`);
   };
 
   return { generateZip };

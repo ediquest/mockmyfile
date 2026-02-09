@@ -1,8 +1,11 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { NO_PROJECT } from '../../core/constants';
 import type { TemplatePayload } from '../../core/types';
 import type { TemplatesByProject } from './useTemplates';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export type TemplatesPanelProps = {
   templateName: string;
@@ -27,6 +30,7 @@ export type TemplatesPanelProps = {
   onDownloadTemplate: (tpl: TemplatePayload) => void;
   onDeleteTemplate: (id: string) => void;
   onAddProject: (project: string) => void;
+  onRenameProject: (from: string, to: string) => void;
   onAddCategory: (project: string, category: string) => void;
   onRenameCategory: (project: string, from: string, to: string) => void;
   onDeleteCategory: (project: string, category: string) => void;
@@ -55,6 +59,7 @@ const TemplatesPanel = ({
   onDownloadTemplate,
   onDeleteTemplate,
   onAddProject,
+  onRenameProject,
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
@@ -62,6 +67,7 @@ const TemplatesPanel = ({
   hasRoot,
   templatesCount,
 }: TemplatesPanelProps) => {
+  const { t } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftDescription, setDraftDescription] = useState('');
@@ -73,11 +79,27 @@ const TemplatesPanel = ({
   const [addCategoryName, setAddCategoryName] = useState('');
   const [renameCategoryInfo, setRenameCategoryInfo] = useState<{ project: string; category: string } | null>(null);
   const [renameCategoryName, setRenameCategoryName] = useState('');
+  const [renameProjectName, setRenameProjectName] = useState('');
+  const [renameProjectInfo, setRenameProjectInfo] = useState<string | null>(null);
   const [blockedDeleteInfo, setBlockedDeleteInfo] = useState<{ project: string; category: string } | null>(null);
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<{ project: string; category: string } | null>(null);
   const originalRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const lastSavedRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
+  const renderModal = (children: ReactNode, onClose: () => void) =>
+    createPortal(
+      <div className="modal-backdrop" role="presentation" onClick={onClose}>
+        <div
+          className="modal"
+          role="dialog"
+          aria-modal="true"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {children}
+        </div>
+      </div>,
+      document.body,
+    );
 
   const startEdit = (tpl: TemplatePayload) => {
     setEditingId(tpl.id);
@@ -100,14 +122,6 @@ const TemplatesPanel = ({
   };
 
   const cancelEdit = () => {
-    if (editingId && originalRef.current) {
-      onRenameTemplate(editingId, {
-        name: originalRef.current.name,
-        description: originalRef.current.description,
-        project: originalRef.current.project,
-        category: originalRef.current.category,
-      });
-    }
     setEditingId(null);
     setDraftName('');
     setDraftDescription('');
@@ -166,18 +180,21 @@ const TemplatesPanel = ({
     return found.categories.map((c) => c.category);
   };
 
+  const labelCategory = (category: string) =>
+    category === defaultCategory ? t('templates.defaultCategory') : category;
+
   return (
     <section className="panel">
       <div className="panel-row">
         <div>
-          <h2>Szablony</h2>
-          <p>Zapisywane lokalnie w przeglądarce.</p>
+          <h2>{t('templates.title')}</h2>
+          <p>{t('templates.subtitle')}</p>
         </div>
         <div className="panel-actions">
           <input
             className="input"
             value={templateName}
-            placeholder="Nazwa szablonu"
+            placeholder={t('templates.templateNamePlaceholder')}
             onChange={(e) => setTemplateName(e.target.value)}
           />
           <select
@@ -185,7 +202,7 @@ const TemplatesPanel = ({
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
           >
-            <option value="">Bez projektu</option>
+            <option value="">{t('templates.projectNone')}</option>
             {projects.map((project) => (
               <option key={project} value={project}>
                 {project}
@@ -193,7 +210,7 @@ const TemplatesPanel = ({
             ))}
           </select>
           <button className="button" onClick={onSaveTemplate} disabled={!hasRoot}>
-            Zapisz
+            {t('templates.save')}
           </button>
         </div>
       </div>
@@ -202,7 +219,7 @@ const TemplatesPanel = ({
           <input
             className="input"
             value={newProject}
-            placeholder="Nowy projekt"
+            placeholder={t('templates.newProjectPlaceholder')}
             onChange={(e) => setNewProject(e.target.value)}
           />
           <button
@@ -215,15 +232,15 @@ const TemplatesPanel = ({
               setNewProject('');
             }}
           >
-            Dodaj projekt
+            {t('templates.addProject')}
           </button>
           <select
             className="input"
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
           >
-            <option value="">Wszystkie projekty</option>
-            <option value={NO_PROJECT}>Bez projektu</option>
+            <option value="">{t('templates.filterAllLabel')}</option>
+            <option value={NO_PROJECT}>{t('templates.projectNone')}</option>
             {projects.map((project) => (
               <option key={project} value={project}>
                 {project}
@@ -238,7 +255,7 @@ const TemplatesPanel = ({
           onClick={() => setProjectFilter('')}
           type="button"
         >
-          Wszystkie ({templatesCount})
+          {t('templates.allPill')} ({templatesCount})
         </button>
         {projectStats.map(([project, count]) => (
           <button
@@ -247,16 +264,18 @@ const TemplatesPanel = ({
             onClick={() => setProjectFilter(project)}
             type="button"
           >
-            {project === NO_PROJECT ? 'Bez projektu' : project} ({count})
+            {project === NO_PROJECT ? t('templates.projectNone') : project} ({count})
           </button>
         ))}
       </div>
-      {templatesByProject.length === 0 && <p className="muted">Brak zapisanych szablonów.</p>}
+      {templatesByProject.length === 0 && <p className="muted">{t('templates.noTemplates')}</p>}
       <div className="project-accordion">
         {templatesByProject.map(({ project, categories }) => {
+          const visibleCategories = categories.filter((categoryGroup) => categoryGroup.items.length > 0);
           const isOpen = expandedProjects[project] ??
             (projectFilter ? project === projectFilter : false);
           const totalCount = categories.reduce((sum, c) => sum + c.items.length, 0);
+          const isProjectDefault = project === NO_PROJECT;
           return (
             <div className="project-section" key={project}>
               <div
@@ -279,8 +298,24 @@ const TemplatesPanel = ({
                 }}
               >
                 <span className="project-toggle">{isOpen ? '-' : '+'}</span>
-                <strong>{project === NO_PROJECT ? 'Bez projektu' : project}</strong>
-                <span className="project-count">{totalCount} szablonów</span>
+                <strong>{project === NO_PROJECT ? t('templates.projectNone') : project}</strong>
+                <span className="project-count">
+                  {t('templates.projectCount', { count: totalCount })}
+                </span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={t('templates.renameProjectButtonTitle')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (isProjectDefault) return;
+                    setRenameProjectInfo(project);
+                    setRenameProjectName(project);
+                  }}
+                  disabled={isProjectDefault}
+                >
+                  ✎
+                </button>
                 <button
                   type="button"
                   className="button ghost compact"
@@ -290,12 +325,12 @@ const TemplatesPanel = ({
                     setAddCategoryName('');
                   }}
                 >
-                  Dodaj kategorię
+                  {t('templates.addCategory')}
                 </button>
               </div>
               {isOpen && (
                 <div className="category-accordion">
-                  {categories.map(({ category, items }) => {
+                  {visibleCategories.map(({ category, items }) => {
                     const categoryKey = `${project}::${category}`;
                     const isCategoryOpen = expandedCategories[categoryKey] ?? true;
                     const isDefaultCategory = category === defaultCategory;
@@ -321,13 +356,13 @@ const TemplatesPanel = ({
                           }}
                         >
                           <span className="project-toggle">{isCategoryOpen ? '-' : '+'}</span>
-                          <strong>{category}</strong>
+                          <strong>{labelCategory(category)}</strong>
                           <span className="project-count">{items.length}</span>
                           <div className="category-actions">
                             <button
                               type="button"
                               className="icon-btn"
-                              title="Zmień nazwę"
+                              title={t('templates.renameCategoryButtonTitle')}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 setRenameCategoryInfo({ project, category });
@@ -340,7 +375,7 @@ const TemplatesPanel = ({
                             <button
                               type="button"
                               className="icon-btn danger"
-                              title="Usuń kategorię"
+                              title={t('templates.deleteCategoryButtonTitle')}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (items.length > 0) {
@@ -381,19 +416,19 @@ const TemplatesPanel = ({
                                   </div>
                                   <div className="template-desc">
                                     {isEditing ? (
-                                      <textarea
-                                        className="input textarea"
-                                        rows={2}
-                                        value={draftDescription}
-                                        placeholder="Opis interfejsu"
-                                        onChange={(e) => setDraftDescription(e.target.value)}
-                                      />
+                                        <textarea
+                                          className="input textarea"
+                                          rows={2}
+                                          value={draftDescription}
+                                          placeholder={t('templates.descriptionPlaceholder')}
+                                          onChange={(e) => setDraftDescription(e.target.value)}
+                                        />
                                     ) : (
                                       <textarea
                                         className="input textarea read-only"
                                         rows={2}
                                         value={tpl.description ?? ''}
-                                        placeholder="Opis interfejsu"
+                                        placeholder={t('templates.descriptionPlaceholder')}
                                         readOnly
                                       />
                                     )}
@@ -417,7 +452,9 @@ const TemplatesPanel = ({
                                               }
                                             }}
                                           >
-                                            <option value={NO_PROJECT}>Bez projektu</option>
+                                            <option value={NO_PROJECT}>
+                                              {t('templates.projectNone')}
+                                            </option>
                                             {projects.map((projectOption) => (
                                               <option key={projectOption} value={projectOption}>
                                                 {projectOption}
@@ -432,7 +469,7 @@ const TemplatesPanel = ({
                                             {Array.from(new Set([defaultCategory, ...categoryList])).map(
                                               (cat) => (
                                                 <option key={cat} value={cat}>
-                                                  {cat}
+                                                  {labelCategory(cat)}
                                                 </option>
                                               ),
                                             )}
@@ -447,24 +484,24 @@ const TemplatesPanel = ({
                                             collapseAllProjects();
                                           }}
                                         >
-                                          Wczytaj
+                                          {t('templates.load')}
                                         </button>
                                         <button
                                           className="button ghost"
                                           onClick={() => onDownloadTemplate(tpl)}
                                         >
-                                          Pobierz
+                                          {t('templates.download')}
                                         </button>
                                       </div>
                                     </div>
                                     <div className="template-actions-right">
                                       {isEditing ? (
                                         <button className="button ghost" onClick={cancelEdit}>
-                                          Zamknij
+                                          {t('templates.close')}
                                         </button>
                                       ) : (
                                         <button className="button ghost" onClick={() => startEdit(tpl)}>
-                                          Edytuj
+                                          {t('templates.edit')}
                                         </button>
                                       )}
                                       {!isEditing && (
@@ -472,7 +509,7 @@ const TemplatesPanel = ({
                                           className="button danger"
                                           onClick={() => setConfirmDeleteId(tpl.id)}
                                         >
-                                          Usuń
+                                          {t('templates.delete')}
                                         </button>
                                       )}
                                     </div>
@@ -491,14 +528,43 @@ const TemplatesPanel = ({
           );
         })}
       </div>
-      {addCategoryProject && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h3>Dodaj kategorię</h3>
+      {renameProjectInfo &&
+        renderModal(
+          <>
+            <h3>{t('templates.renameProjectTitle')}</h3>
+            <input
+              className="input"
+              value={renameProjectName}
+              onChange={(e) => setRenameProjectName(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setRenameProjectInfo(null)}>
+                {t('templates.modalCancel')}
+              </button>
+              <button
+                className="button"
+                onClick={() => {
+                  const trimmed = renameProjectName.trim();
+                  if (!trimmed) return;
+                  onRenameProject(renameProjectInfo, trimmed);
+                  setRenameProjectInfo(null);
+                  setRenameProjectName('');
+                }}
+              >
+                {t('templates.modalSave')}
+              </button>
+            </div>
+          </>,
+          () => setRenameProjectInfo(null),
+        )}
+      {addCategoryProject &&
+        renderModal(
+          <>
+            <h3>{t('templates.categoryAddTitle')}</h3>
             <input
               className="input"
               value={addCategoryName}
-              placeholder="Nazwa kategorii"
+              placeholder={t('templates.categoryNamePlaceholder')}
               autoFocus
               onChange={(e) => setAddCategoryName(e.target.value)}
               onKeyDown={(event) => {
@@ -514,7 +580,7 @@ const TemplatesPanel = ({
             />
             <div className="modal-actions">
               <button className="button ghost" onClick={() => setAddCategoryProject(null)}>
-                Anuluj
+                {t('templates.modalCancel')}
               </button>
               <button
                 className="button"
@@ -526,16 +592,16 @@ const TemplatesPanel = ({
                   setAddCategoryName('');
                 }}
               >
-                Dodaj
+                {t('templates.modalAdd')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {renameCategoryInfo && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h3>Zmień nazwę kategorii</h3>
+          </>,
+          () => setAddCategoryProject(null),
+        )}
+      {renameCategoryInfo &&
+        renderModal(
+          <>
+            <h3>{t('templates.renameCategoryTitle')}</h3>
             <input
               className="input"
               value={renameCategoryName}
@@ -543,7 +609,7 @@ const TemplatesPanel = ({
             />
             <div className="modal-actions">
               <button className="button ghost" onClick={() => setRenameCategoryInfo(null)}>
-                Anuluj
+                {t('templates.modalCancel')}
               </button>
               <button
                 className="button"
@@ -555,33 +621,33 @@ const TemplatesPanel = ({
                   setRenameCategoryName('');
                 }}
               >
-                Zapisz
+                {t('templates.modalSave')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {blockedDeleteInfo && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h3>Nie można usunąć</h3>
-            <p>Ta kategoria ma przypisane interfejsy. Usuń je lub przenieś do innej kategorii.</p>
+          </>,
+          () => setRenameCategoryInfo(null),
+        )}
+      {blockedDeleteInfo &&
+        renderModal(
+          <>
+            <h3>{t('templates.blockedDeleteTitle')}</h3>
+            <p>{t('templates.blockedDeleteMessage')}</p>
             <div className="modal-actions">
               <button className="button ghost" onClick={() => setBlockedDeleteInfo(null)}>
-                OK
+                {t('common.ok')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {confirmDeleteCategory && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h3>Usunąć kategorię?</h3>
-            <p>Ta operacja jest nieodwracalna.</p>
+          </>,
+          () => setBlockedDeleteInfo(null),
+        )}
+      {confirmDeleteCategory &&
+        renderModal(
+          <>
+            <h3>{t('templates.deleteCategoryConfirmTitle')}</h3>
+            <p>{t('templates.deleteConfirmMessage')}</p>
             <div className="modal-actions">
               <button className="button ghost" onClick={() => setConfirmDeleteCategory(null)}>
-                Anuluj
+                {t('templates.modalCancel')}
               </button>
               <button
                 className="button danger"
@@ -590,20 +656,20 @@ const TemplatesPanel = ({
                   setConfirmDeleteCategory(null);
                 }}
               >
-                Usuń
+                {t('templates.modalDelete')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {confirmDeleteId && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h3>Usunąć szablon?</h3>
-            <p>Ta operacja jest nieodwracalna.</p>
+          </>,
+          () => setConfirmDeleteCategory(null),
+        )}
+      {confirmDeleteId &&
+        renderModal(
+          <>
+            <h3>{t('templates.deleteTemplateConfirmTitle')}</h3>
+            <p>{t('templates.deleteConfirmMessage')}</p>
             <div className="modal-actions">
               <button className="button ghost" onClick={() => setConfirmDeleteId(null)}>
-                Anuluj
+                {t('templates.modalCancel')}
               </button>
               <button
                 className="button danger"
@@ -612,12 +678,12 @@ const TemplatesPanel = ({
                   setConfirmDeleteId(null);
                 }}
               >
-                Usuń
+                {t('templates.modalDelete')}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>,
+          () => setConfirmDeleteId(null),
+        )}
     </section>
   );
 };

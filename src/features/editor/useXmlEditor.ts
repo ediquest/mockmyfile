@@ -4,6 +4,7 @@ import type { FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/ty
 import { parseXml } from '../../core/xml/parse';
 import { extractLineCol } from '../../core/xml/utils';
 import { collectPaths } from '../../core/xml/tree';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export type UseXmlEditorArgs = {
   xmlText: string;
@@ -38,6 +39,7 @@ const useXmlEditor = ({
   setExpandedMap,
   setShowLoopInstances,
 }: UseXmlEditorArgs) => {
+  const { t } = useI18n();
   const [editMode, setEditMode] = useState(false);
   const [editedXml, setEditedXml] = useState('');
   const [xmlError, setXmlError] = useState('');
@@ -58,11 +60,13 @@ const useXmlEditor = ({
       if (parseError) {
         const details = extractLineCol(parseError.textContent ?? '');
         if (details?.line && details?.col) {
-          setXmlError(`Błąd składni XML — linia ${details.line}, kolumna ${details.col}.`);
+          setXmlError(
+            t('error.xmlSyntaxLineCol', { line: details.line, col: details.col }),
+          );
         } else if (details?.line) {
-          setXmlError(`Błąd składni XML — linia ${details.line}.`);
+          setXmlError(t('error.xmlSyntaxLine', { line: details.line }));
         } else {
-          setXmlError('Błąd składni XML — popraw plik przed zapisem.');
+          setXmlError(t('error.xmlSyntaxGeneric'));
         }
       } else {
         setXmlError('');
@@ -73,7 +77,7 @@ const useXmlEditor = ({
         window.clearTimeout(xmlValidateTimeout.current);
       }
     };
-  }, [editedXml, editMode]);
+  }, [editedXml, editMode, t]);
 
   const handleEditToggle = () => {
     if (!editMode) {
@@ -95,10 +99,10 @@ const useXmlEditor = ({
 
     const parsed = parseXml(editedXml);
     if (!parsed.ok) {
-      setStatus(parsed.error);
+      setStatus(t(parsed.errorKey));
       return;
     }
-    setStatus('Zmiany zapisane.');
+    setStatus(t('status.changesSaved'));
     setXmlText(editedXml);
     setRoot(parsed.root);
     setFields(parsed.fields);

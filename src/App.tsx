@@ -17,8 +17,10 @@ import useXmlEditor from './features/editor/useXmlEditor';
 import useTemplates from './features/templates/useTemplates';
 import useTree from './features/tree/useTree';
 import useGenerate from './features/generate/useGenerate';
+import { useI18n } from './i18n/I18nProvider';
 
 const App = () => {
+  const { lang, setLang, t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [xmlText, setXmlText] = useState('');
@@ -147,7 +149,7 @@ const App = () => {
     const text = await file.text();
     const parsed = parseXml(text);
     if (!parsed.ok) {
-      setStatus(parsed.error);
+      setStatus(t(parsed.errorKey));
       return;
     }
     setStatus('');
@@ -163,6 +165,7 @@ const App = () => {
       exportedAt: new Date().toISOString(),
       templates: templates.templates,
       projects: templates.projects,
+      categories: templates.categoriesMap,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json',
@@ -173,7 +176,7 @@ const App = () => {
     link.download = BACKUP_FILE_NAME;
     link.click();
     URL.revokeObjectURL(url);
-    setStatus('Zapisano backup JSON.');
+    setStatus(t('status.backupExported'));
   };
 
   const importBackup = async (file: File) => {
@@ -182,26 +185,28 @@ const App = () => {
       const parsed = JSON.parse(text) as {
         templates?: typeof templates.templates;
         projects?: string[];
+        categories?: Record<string, string[]>;
       };
       const nextTemplates = Array.isArray(parsed.templates)
         ? parsed.templates.map((tpl) => ({
             ...tpl,
             description: tpl.description ?? '',
-            category: tpl.category ?? 'Ogólne',
+            category: tpl.category ?? templates.defaultCategory,
           }))
         : [];
       const nextProjects = Array.isArray(parsed.projects) ? parsed.projects : [];
       persistTemplates(nextTemplates);
       persistProjects(nextProjects);
+      templates.setCategoriesFromImport(parsed.categories ?? {});
       templates.setTemplateList(nextTemplates);
       templates.setProjects(nextProjects);
       templates.setProjectName('');
       templates.setProjectFilter('');
       templates.setActiveTemplateId('');
       clearLastId();
-      setStatus('Zaimportowano backup JSON.');
+      setStatus(t('status.backupImported'));
     } catch {
-      setStatus('Nie udało się zaimportować pliku JSON.');
+      setStatus(t('status.backupImportFailed'));
     }
   };
 
@@ -218,6 +223,18 @@ const App = () => {
 
   return (
     <div className="app">
+      <div className="lang-switch">
+        <label htmlFor="lang-select">{t('language.label')}</label>
+        <select
+          id="lang-select"
+          className="input compact"
+          value={lang}
+          onChange={(e) => setLang(e.target.value === 'en' ? 'en' : 'pl')}
+        >
+          <option value="pl">{t('language.polish')}</option>
+          <option value="en">{t('language.english')}</option>
+        </select>
+      </div>
       <UploadHero fileInputRef={fileInputRef} onFile={(file) => void handleFile(file)} />
 
       <TemplatesPanel
@@ -248,6 +265,7 @@ const App = () => {
         }}
         onDeleteTemplate={templates.deleteTemplate}
         onAddProject={templates.addProject}
+        onRenameProject={templates.renameProject}
         onAddCategory={templates.addCategory}
         onRenameCategory={templates.renameCategory}
         onDeleteCategory={templates.deleteCategory}
@@ -312,7 +330,7 @@ const App = () => {
         importBackup={importBackup}
       />
 
-      <footer className="footer">© 2026 Adrian Sarczyński</footer>
+      <footer className="footer">{t('footer.credit')}</footer>
     </div>
   );
 };

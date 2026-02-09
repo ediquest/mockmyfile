@@ -20,6 +20,7 @@ import {
   persistTemplates,
 } from '../../core/storage';
 import { normalizeRelation } from '../../core/relations';
+import { useI18n } from '../../i18n/I18nProvider';
 import { parseXml } from '../../core/xml/parse';
 import { collectPaths } from '../../core/xml/tree';
 import { getBaseName, normalizeFieldSetting } from '../../core/templates';
@@ -95,6 +96,7 @@ const useTemplates = ({
   setEditedXml,
   setXmlError,
 }: UseTemplatesArgs) => {
+  const { t } = useI18n();
   const [templateName, setTemplateName] = useState('');
   const [templates, setTemplateList] = useState<TemplatePayload[]>(
     normalizeTemplates(getTemplates()),
@@ -161,7 +163,7 @@ const useTemplates = ({
     persistTemplates(next);
     setTemplateList(next);
     persistLastId(id);
-    setStatus('Szablon zapisany w LocalStorage.');
+    setStatus(t('status.templateSaved'));
     if (trimmedProject && !projects.includes(trimmedProject)) {
       const updated = [...projects, trimmedProject].sort();
       setProjects(updated);
@@ -178,6 +180,7 @@ const useTemplates = ({
       description: tpl.description ?? '',
       category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
     };
+    persistLastId(normalized.id);
     setXmlText(normalized.xmlText);
     setEditedXml(normalized.xmlText);
     setXmlError('');
@@ -189,11 +192,11 @@ const useTemplates = ({
     setProjectName(normalized.project || '');
     const parsed = parseXml(normalized.xmlText);
     if (!parsed.ok) {
-      setStatus(parsed.error);
+      setStatus(t(parsed.errorKey));
       return;
     }
     setRoot(parsed.root);
-    setStatus('Szablon wczytany.');
+    setStatus(t('status.templateLoaded'));
     setActiveTemplateId(normalized.id);
     const paths: string[] = [];
     collectPaths(parsed.root, `/${parsed.root.tag}`, paths);
@@ -322,6 +325,38 @@ const useTemplates = ({
     persistCategories(next);
   };
 
+  const renameProject = (from: string, to: string) => {
+    const trimmed = to.trim();
+    if (!trimmed) return;
+    if (from === NO_PROJECT) return;
+    if (from === trimmed) return;
+
+    const nextProjects = projects.map((p) => (p === from ? trimmed : p));
+    setProjects(nextProjects);
+    persistProjects(nextProjects);
+
+    const nextTemplates = templates.map((tpl) =>
+      tpl.project === from ? { ...tpl, project: trimmed } : tpl,
+    );
+    persistTemplates(nextTemplates);
+    setTemplateList(nextTemplates);
+
+    const nextCategories: Record<string, string[]> = { ...categoriesMap };
+    if (nextCategories[from]) {
+      nextCategories[trimmed] = nextCategories[from];
+      delete nextCategories[from];
+      persistCategories(nextCategories);
+      setCategoriesMap(nextCategories);
+    }
+
+    if (projectFilter === from) {
+      setProjectFilter(trimmed);
+    }
+    if (projectName === from) {
+      setProjectName(trimmed);
+    }
+  };
+
   const addProject = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -425,6 +460,8 @@ const useTemplates = ({
     addCategory,
     renameCategory,
     deleteCategory,
+    renameProject,
+    categoriesMap,
     templatesByProject,
     projectStats,
     visibleTemplates,

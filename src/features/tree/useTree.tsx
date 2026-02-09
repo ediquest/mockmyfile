@@ -5,6 +5,7 @@ import { MAX_SUGGESTIONS } from '../../core/constants';
 import { highlightText } from '../../core/xml/highlight';
 import { normalizeId, normalizeLoopId, stripLoopMarkers } from '../../core/templates';
 import { getExpandedKey } from '../../core/storage';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export type UseTreeArgs = {
   root: XmlNode | null;
@@ -35,7 +36,8 @@ const useTree = ({
   addLoopAt,
   removeLoopAt,
 }: UseTreeArgs) => {
-  
+  const { t } = useI18n();
+
   const [highlightPath, setHighlightPath] = useState('');
   const [treeQuery, setTreeQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -117,7 +119,7 @@ const useTree = ({
     return (
       <div className="field-controls">
         <label>
-          Tryb
+          {t('field.mode')}
           <select
             value={field.mode}
             disabled={locked}
@@ -127,15 +129,15 @@ const useTree = ({
               })
             }
           >
-            <option value="same">Bez zmian</option>
-            <option value="fixed">Stała wartość</option>
-            <option value="increment">Inkrementacja</option>
-            <option value="random">Random</option>
+            <option value="same">{t('field.mode.same')}</option>
+            <option value="fixed">{t('field.mode.fixed')}</option>
+            <option value="increment">{t('field.mode.increment')}</option>
+            <option value="random">{t('field.mode.random')}</option>
           </select>
         </label>
         {field.mode === 'fixed' && (
           <label>
-            Wartość
+            {t('field.value')}
             <input
               className="input"
               value={field.fixedValue}
@@ -146,7 +148,7 @@ const useTree = ({
         )}
         {field.mode === 'increment' && (
           <label>
-            Skok
+            {t('field.step')}
             <input
               type="number"
               className="input"
@@ -158,7 +160,7 @@ const useTree = ({
         )}
         {field.mode === 'random' && field.kind === 'number' && (
           <label>
-            Zakres
+            {t('field.range')}
             <div className="split">
               <input
                 type="number"
@@ -179,7 +181,7 @@ const useTree = ({
         )}
         {field.mode === 'random' && field.kind === 'number' && (
           <label>
-            Liczba znaków
+            {t('field.lengthDigits')}
             <input
               type="number"
               className="input"
@@ -191,7 +193,7 @@ const useTree = ({
         )}
         {field.mode === 'random' && field.kind === 'text' && (
           <label>
-            Długość
+            {t('field.length')}
             <input
               type="number"
               className="input"
@@ -203,7 +205,7 @@ const useTree = ({
         )}
         {field.mode === 'random' && field.kind === 'date' && (
           <label>
-            Zakres dni
+            {t('field.daysRange')}
             <input
               type="number"
               className="input"
@@ -229,9 +231,11 @@ const useTree = ({
         <div className="field-header">
           <div>
             <strong>{label}</strong>
-            <span>Wartość bazowa: {field.value}</span>
+            <span>{t('field.baseValue', { value: field.value })}</span>
           </div>
-          {relation && <span className="chip">Powiązane z {relation.masterId}</span>}
+          {relation && (
+            <span className="chip">{t('field.relatedTo', { master: relation.masterId })}</span>
+          )}
         </div>
         {renderFieldControls(field)}
       </div>
@@ -241,7 +245,7 @@ const useTree = ({
   const renderNodeEditor = (node: XmlNode, path: string, depth = 0) => {
     const templatePath = normalizeId(path.replace(/\[\d+\]/g, '[]'));
     const indent = { marginLeft: `${depth * 18}px` };
-    const loopBadge = node.loopId ? <span className="chip">Pętla</span> : null;
+    const loopBadge = node.loopId ? <span className="chip">{t('field.loop')}</span> : null;
     const query = treeQuery.trim().toLowerCase();
     const queryActive = query.length > 0;
     const matches = nodeHasMatch(node, path, query);
@@ -328,7 +332,7 @@ const useTree = ({
                     removeLoopAt(templatePath);
                   }}
                 >
-                  Usuń pętlę
+                  {t('field.deleteLoop')}
                 </button>
                 <span className="loop-count">x{loopCount}</span>
               </>
@@ -341,7 +345,7 @@ const useTree = ({
                   addLoopAt(templatePath);
                 }}
               >
-                Powiel
+                {t('field.duplicate')}
               </button>
             )}
           </span>
@@ -358,7 +362,7 @@ const useTree = ({
               </div>
             )}
             {node.children.length === 0 && node.text !== undefined && (
-              <div className="tree-text">{renderFieldBlock(templatePath, 'Wartość pola')}</div>
+              <div className="tree-text">{renderFieldBlock(templatePath, t('field.valueField'))}</div>
             )}
             {node.children.map((child) => {
               const childLoopKey = child.loopId ? normalizeLoopId(child.loopId) : '';
@@ -372,7 +376,9 @@ const useTree = ({
                       key={`${templatePath}/${child.tag}[${index}]`}
                       className="loop-instance"
                     >
-                      <div className="loop-label">Iteracja {index + 1}</div>
+                      <div className="loop-label">
+                        {t('field.iteration', { index: index + 1 })}
+                      </div>
                       {renderNodeEditor(child, `${path}/${child.tag}[${index}]`, depth + 1)}
                     </div>
                   ))}

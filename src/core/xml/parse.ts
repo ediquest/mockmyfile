@@ -7,7 +7,7 @@ export const parseXml = (xmlText: string): ParseResult => {
   const doc = parser.parseFromString(xmlText, 'application/xml');
   const parseError = doc.getElementsByTagName('parsererror')[0];
   if (parseError) {
-    return { ok: false, error: 'Nie udało się sparsować XML. Sprawdź poprawność pliku.' };
+    return { ok: false, errorKey: 'error.xmlParse' };
   }
   const rootEl = doc.documentElement;
   const root = buildNode(rootEl);

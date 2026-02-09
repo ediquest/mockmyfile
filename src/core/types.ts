@@ -58,7 +58,7 @@ export type TemplatePayload = {
 };
 
 export type ParseResult =
-  | { ok: false; error: string }
+  | { ok: false; errorKey: 'error.xmlParse' }
   | {
       ok: true;
       root: XmlNode;
