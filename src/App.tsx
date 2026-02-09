@@ -3,6 +3,7 @@ import './App.css';
 import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from './core/types';
 import { parseXml } from './core/xml/parse';
 import { parseJson } from './core/json/parse';
+import { parseCsv } from './core/csv/parse';
 import { applyLoopMarker, clearLoopMarker } from './core/xml/tree';
 import { normalizeLoopId } from './core/templates';
 import { BACKUP_FILE_NAME } from './core/constants';
@@ -27,6 +28,7 @@ const App = () => {
   const [xmlText, setXmlText] = useState('');
   const [fileName, setFileName] = useState('');
   const [format, setFormat] = useState<DataFormat>('xml');
+  const [csvDelimiter, setCsvDelimiter] = useState(';');
   const [root, setRoot] = useState<XmlNode | null>(null);
   const [fields, setFields] = useState<FieldSetting[]>([]);
   const [loops, setLoops] = useState<LoopSetting[]>([]);
@@ -104,11 +106,14 @@ const App = () => {
     setStatus,
     setExpandedMap,
     setShowLoopInstances,
+    setCsvDelimiter,
   });
 
   const templates = useTemplates({
     format,
     setFormat,
+    csvDelimiter,
+    setCsvDelimiter,
     root,
     xmlText,
     fields,
@@ -145,6 +150,7 @@ const App = () => {
 
   const { generateZip } = useGenerate({
     format,
+    csvDelimiter,
     root,
     fields,
     loops,
@@ -157,16 +163,23 @@ const App = () => {
   const detectFormat = (fileNameValue: string, text: string): DataFormat => {
     const lower = fileNameValue.toLowerCase();
     if (lower.endsWith('.json')) return 'json';
+    if (lower.endsWith('.csv')) return 'csv';
     if (lower.endsWith('.xml')) return 'xml';
     const trimmed = text.trim();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
+    if (trimmed.startsWith('<')) return 'xml';
+    if (trimmed.includes(';') || trimmed.includes(',') || trimmed.includes('\t')) return 'csv';
     return 'xml';
   };
 
   const handleFile = async (file: File) => {
     const text = await file.text();
     const nextFormat = detectFormat(file.name, text);
-    const parsed = nextFormat === 'json' ? parseJson(text) : parseXml(text);
+    const parsed = nextFormat === 'csv'
+      ? parseCsv(text)
+      : nextFormat === 'json'
+        ? parseJson(text)
+        : parseXml(text);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
       setStatus(`${t(parsed.errorKey)}${detail}`);
@@ -174,12 +187,16 @@ const App = () => {
     }
     setStatus('');
     setFormat(nextFormat);
+    if (nextFormat === 'csv' && 'delimiter' in parsed) {
+      setCsvDelimiter(parsed.delimiter);
+    }
     setXmlText(text);
     setEditedXml(text);
     setXmlError('');
     templates.syncFromUpload(
       file,
       nextFormat,
+      nextFormat === 'csv' && 'delimiter' in parsed ? parsed.delimiter : csvDelimiter,
       parsed.root,
       parsed.fields,
       parsed.loops,
@@ -285,8 +302,9 @@ const App = () => {
         onRenameTemplate={templates.updateTemplateMeta}
         onDownloadTemplate={(tpl) => {
           const fileFormat = tpl.format ?? 'xml';
-          const mime = fileFormat === 'json' ? 'application/json' : 'application/xml';
-          const ext = fileFormat === 'json' ? 'json' : 'xml';
+          const mime =
+            fileFormat === 'json' ? 'application/json' : fileFormat === 'csv' ? 'text/csv' : 'application/xml';
+          const ext = fileFormat === 'json' ? 'json' : fileFormat === 'csv' ? 'csv' : 'xml';
           const blob = new Blob([tpl.xmlText], { type: mime });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');

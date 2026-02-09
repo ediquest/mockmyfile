@@ -24,6 +24,7 @@ import { normalizeRelation } from '../../core/relations';
 import { useI18n } from '../../i18n/I18nProvider';
 import { parseXml } from '../../core/xml/parse';
 import { parseJson } from '../../core/json/parse';
+import { parseCsv } from '../../core/csv/parse';
 import { collectPaths } from '../../core/xml/tree';
 import { collectJsonPaths } from '../../core/json/tree';
 import { getBaseName, normalizeFieldSetting } from '../../core/templates';
@@ -38,6 +39,8 @@ export type TemplatesByProject = {
 export type UseTemplatesArgs = {
   format: DataFormat;
   setFormat: (value: DataFormat) => void;
+  csvDelimiter: string;
+  setCsvDelimiter: (value: string) => void;
   root: XmlNode | null;
   xmlText: string;
   fields: FieldSetting[];
@@ -62,6 +65,7 @@ const normalizeTemplates = (list: TemplatePayload[]) =>
     description: tpl.description ?? '',
     category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
     format: tpl.format ?? 'xml',
+    csvDelimiter: tpl.csvDelimiter ?? ';',
   }));
 
 const normalizeCategoriesMap = (map: Record<string, string[]>) => {
@@ -76,7 +80,7 @@ const normalizeCategoriesMap = (map: Record<string, string[]>) => {
 
 const buildCollapsedMap = (root: XmlNode, format: DataFormat) => {
   const paths: string[] = [];
-  if (format === 'json') {
+  if (format === 'json' || format === 'csv') {
     collectJsonPaths(root, `/${root.tag}`, paths);
   } else {
     collectPaths(root, `/${root.tag}`, paths);
@@ -91,6 +95,8 @@ const buildCollapsedMap = (root: XmlNode, format: DataFormat) => {
 const useTemplates = ({
   format,
   setFormat,
+  csvDelimiter,
+  setCsvDelimiter,
   root,
   xmlText,
   fields,
@@ -171,6 +177,7 @@ const useTemplates = ({
       relations,
       fileName,
       format,
+      csvDelimiter,
     };
     const next = templates.filter((t) => t.id !== id).concat(payload);
     persistTemplates(next);
@@ -193,6 +200,7 @@ const useTemplates = ({
       description: tpl.description ?? '',
       category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
       format: tpl.format ?? 'xml',
+      csvDelimiter: tpl.csvDelimiter ?? ';',
     };
     persistLastId(normalized.id);
     setXmlText(normalized.xmlText);
@@ -205,9 +213,14 @@ const useTemplates = ({
     setTemplateName(normalized.name);
     setProjectName(normalized.project || '');
     setFormat(normalized.format);
-    const parsed = normalized.format === 'json'
-      ? parseJson(normalized.xmlText)
-      : parseXml(normalized.xmlText);
+    if (normalized.format === 'csv') {
+      setCsvDelimiter(normalized.csvDelimiter);
+    }
+    const parsed = normalized.format === 'csv'
+      ? parseCsv(normalized.xmlText, { delimiter: normalized.csvDelimiter })
+      : normalized.format === 'json'
+        ? parseJson(normalized.xmlText)
+        : parseXml(normalized.xmlText);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
       setStatus(`${t(parsed.errorKey)}${detail}`);
@@ -217,7 +230,7 @@ const useTemplates = ({
     setStatus(t('status.templateLoaded'));
     setActiveTemplateId(normalized.id);
     const paths: string[] = [];
-    if (normalized.format === 'json') {
+    if (normalized.format === 'json' || normalized.format === 'csv') {
       collectJsonPaths(parsed.root, `/${parsed.root.tag}`, paths);
     } else {
       collectPaths(parsed.root, `/${parsed.root.tag}`, paths);
@@ -468,6 +481,7 @@ const useTemplates = ({
   const syncFromUpload = (
     file: File,
     nextFormat: DataFormat,
+    nextDelimiter: string,
     parsedRoot: XmlNode,
     nextFields: FieldSetting[],
     nextLoops: LoopSetting[],
@@ -475,6 +489,9 @@ const useTemplates = ({
   ) => {
     setFileName(file.name);
     setFormat(nextFormat);
+    if (nextFormat === 'csv') {
+      setCsvDelimiter(nextDelimiter);
+    }
     setRoot(parsedRoot);
     setFields(nextFields);
     setLoops(nextLoops);

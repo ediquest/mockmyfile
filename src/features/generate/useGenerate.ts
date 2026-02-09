@@ -3,11 +3,13 @@ import { useMemo } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { DataFormat, FieldKind, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { escapeXml } from '../../core/xml/escape';
+import { escapeCsvValue } from '../../core/csv/utils';
 import { toIsoDate } from '../../core/xml/utils';
 import { getBaseName, normalizeId, normalizeLoopId, stripLoopMarkers } from '../../core/templates';
 
 export type UseGenerateArgs = {
   format: DataFormat;
+  csvDelimiter: string;
   root: XmlNode | null;
   fields: FieldSetting[];
   loops: LoopSetting[];
@@ -19,6 +21,7 @@ export type UseGenerateArgs = {
 
 const useGenerate = ({
   format,
+  csvDelimiter,
   root,
   fields,
   loops,
@@ -313,24 +316,59 @@ const useGenerate = ({
     return obj;
   };
 
+  const buildCsv = (
+    rowCount: number,
+    delimiter: string,
+    usedValues: Map<string, Set<string>>,
+  ) => {
+    if (!root || root.jsonType !== 'array') return '';
+    const item = root.children[0];
+    if (!item || item.jsonType !== 'object') return '';
+    const headers = item.children.map((child) => child.tag);
+    const lines: string[] = [];
+    lines.push(headers.map((h) => escapeCsvValue(h, delimiter)).join(delimiter));
+    const loopId = root.loopId ?? 'root[]';
+
+    for (let i = 0; i < rowCount; i += 1) {
+      const cache = new Map<string, string>();
+      const loopIndexMap = { [loopId]: i };
+      const row = headers.map((header) => {
+        const id = `root[]/${header}`;
+        const field = getFieldEntry(id);
+        const value = field
+          ? resolveValue(field.id, i, loopIndexMap, cache, usedValues)
+          : '';
+        return escapeCsvValue(String(value), delimiter);
+      });
+      lines.push(row.join(delimiter));
+    }
+    return `${lines.join('\n')}\n`;
+  };
+
   const generateZip = async () => {
     if (!root) return;
     try {
       const zip = new JSZip();
       const baseName = getBaseName(fileName || 'message');
       const usedValues = new Map<string, Set<string>>();
-      for (let i = 0; i < filesToGenerate; i += 1) {
-        const cache = new Map<string, string>();
-        if (format === 'json') {
-          const jsonValue = buildJsonValue(root, `/${root.tag}`, i, {}, cache, usedValues);
-          const json = `${JSON.stringify(jsonValue, null, 2)}\n`;
-          const fileLabel = `${baseName}_${i + 1}.json`;
-          zip.file(fileLabel, json);
-        } else {
-          const content = serializeNode(root, `/${root.tag}`, i, {}, cache, usedValues);
-          const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
-          const fileLabel = `${baseName}_${i + 1}.xml`;
-          zip.file(fileLabel, xml);
+      if (format === 'csv') {
+        const csv = buildCsv(filesToGenerate, csvDelimiter, usedValues);
+        const fileLabel = `${baseName}_generated.csv`;
+        zip.file(fileLabel, csv);
+      } else {
+        for (let i = 0; i < filesToGenerate; i += 1) {
+          const cache = new Map<string, string>();
+          if (format === 'json') {
+            const jsonValue = buildJsonValue(root, `/${root.tag}`, i, {}, cache, usedValues);
+            const json = `${JSON.stringify(jsonValue, null, 2)}\n`;
+            const fileLabel = `${baseName}_${i + 1}.json`;
+            zip.file(fileLabel, json);
+          } else {
+            const content = serializeNode(root, `/${root.tag}`, i, {}, cache, usedValues);
+            const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
+            const fileLabel = `${baseName}_${i + 1}.xml`;
+            zip.file(fileLabel, xml);
+          }
         }
       }
       const blob = await zip.generateAsync({ type: 'blob' });

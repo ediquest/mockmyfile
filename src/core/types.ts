@@ -3,7 +3,7 @@ export type XmlAttr = {
   value: string;
 };
 
-export type DataFormat = 'xml' | 'json';
+export type DataFormat = 'xml' | 'json' | 'csv';
 
 export type JsonNodeType = 'object' | 'array' | 'value';
 
@@ -64,10 +64,11 @@ export type TemplatePayload = {
   relations: Relation[];
   fileName: string;
   format?: DataFormat;
+  csvDelimiter?: string;
 };
 
 export type ParseResult =
-  | { ok: false; errorKey: 'error.xmlParse' | 'error.jsonParse'; errorDetail?: string }
+  | { ok: false; errorKey: 'error.xmlParse' | 'error.jsonParse' | 'error.csvParse'; errorDetail?: string }
   | {
       ok: true;
       root: XmlNode;

@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { parseXml } from '../../core/xml/parse';
 import { parseJson } from '../../core/json/parse';
+import { parseCsv } from '../../core/csv/parse';
 import { extractLineCol } from '../../core/xml/utils';
 import { collectPaths } from '../../core/xml/tree';
 import { collectJsonPaths } from '../../core/json/tree';
@@ -19,11 +20,12 @@ export type UseXmlEditorArgs = {
   setStatus: (value: string) => void;
   setExpandedMap: Dispatch<SetStateAction<Record<string, boolean>>>;
   setShowLoopInstances: Dispatch<SetStateAction<boolean>>;
+  setCsvDelimiter: (value: string) => void;
 };
 
 const buildCollapsedMap = (root: XmlNode, format: DataFormat) => {
   const paths: string[] = [];
-  if (format === 'json') {
+  if (format === 'json' || format === 'csv') {
     collectJsonPaths(root, `/${root.tag}`, paths);
   } else {
     collectPaths(root, `/${root.tag}`, paths);
@@ -46,6 +48,7 @@ const useXmlEditor = ({
   setStatus,
   setExpandedMap,
   setShowLoopInstances,
+  setCsvDelimiter,
 }: UseXmlEditorArgs) => {
   const { t } = useI18n();
   const [editMode, setEditMode] = useState(false);
@@ -83,11 +86,23 @@ const useXmlEditor = ({
         return;
       }
 
-      try {
-        JSON.parse(editedXml);
-        setXmlError('');
-      } catch {
-        setXmlError(t('error.jsonSyntaxGeneric'));
+      if (format === 'json') {
+        try {
+          JSON.parse(editedXml);
+          setXmlError('');
+        } catch {
+          setXmlError(t('error.jsonSyntaxGeneric'));
+        }
+        return;
+      }
+
+      if (format === 'csv') {
+        const parsed = parseCsv(editedXml);
+        if (!parsed.ok) {
+          setXmlError(t('error.csvParse'));
+        } else {
+          setXmlError('');
+        }
       }
     }, 300);
     return () => {
@@ -116,7 +131,11 @@ const useXmlEditor = ({
       return;
     }
 
-    const parsed = format === 'json' ? parseJson(editedXml) : parseXml(editedXml);
+    const parsed = format === 'csv'
+      ? parseCsv(editedXml)
+      : format === 'json'
+        ? parseJson(editedXml)
+        : parseXml(editedXml);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
       setStatus(`${t(parsed.errorKey)}${detail}`);
@@ -129,6 +148,9 @@ const useXmlEditor = ({
     setLoops(parsed.loops);
     setRelations(parsed.relations);
     setExpandedMap(buildCollapsedMap(parsed.root, format));
+    if (format === 'csv' && 'delimiter' in parsed) {
+      setCsvDelimiter(parsed.delimiter);
+    }
     setShowLoopInstances(false);
     setEditMode(false);
   };

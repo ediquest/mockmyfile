@@ -428,12 +428,22 @@ const TemplatesPanel = ({
                                           value={draftName}
                                           onChange={(e) => setDraftName(e.target.value)}
                                         />
-                                        <span className="template-file">{tpl.fileName}</span>
+                                        <div className="template-meta-row">
+                                          <span className="template-file">{tpl.fileName}</span>
+                                          <span className="template-format">
+                                            {(tpl.format ?? 'xml').toUpperCase()}
+                                          </span>
+                                        </div>
                                       </div>
                                     ) : (
                                       <>
                                         <strong>{tpl.name}</strong>
-                                        <span className="template-file">{tpl.fileName}</span>
+                                        <div className="template-meta-row">
+                                          <span className="template-file">{tpl.fileName}</span>
+                                          <span className="template-format">
+                                            {(tpl.format ?? 'xml').toUpperCase()}
+                                          </span>
+                                        </div>
                                       </>
                                     )}
                                   </div>

@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react';
 import type { DataFormat, XmlNode } from '../../core/types';
 import { highlightXml } from '../../core/xml/highlight';
 import { highlightJson } from '../../core/json/highlight';
+import { highlightCsv } from '../../core/csv/highlight';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type TreePanelProps = {
@@ -58,7 +59,7 @@ const TreePanel = ({
   renderNodeEditor,
 }: TreePanelProps) => {
   const { t } = useI18n();
-  const canEditSource = format === 'xml' || format === 'json';
+  const canEditSource = format === 'xml' || format === 'json' || format === 'csv';
   const effectiveEditMode = canEditSource && editMode;
 
   return (
@@ -179,7 +180,12 @@ const TreePanel = ({
               className="xml-code"
               aria-hidden="true"
               dangerouslySetInnerHTML={{
-                __html: format === 'json' ? highlightJson(editedXml) : highlightXml(editedXml),
+                __html:
+                  format === 'json'
+                    ? highlightJson(editedXml)
+                    : format === 'csv'
+                      ? highlightCsv(editedXml)
+                      : highlightXml(editedXml),
               }}
             />
           </div>

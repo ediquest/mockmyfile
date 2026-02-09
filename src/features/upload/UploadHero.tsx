@@ -22,7 +22,7 @@ const UploadHero = ({ fileInputRef, onFile }: UploadHeroProps) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xml,.json"
+          accept=".xml,.json,.csv"
           className="visually-hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];

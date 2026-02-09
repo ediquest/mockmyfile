@@ -94,8 +94,10 @@ const useTree = ({
   const getFieldEntry = (templatePath: string) =>
     fieldMap.get(templatePath) ?? fieldMap.get(stripLoopMarkers(templatePath));
 
+  const isJsonLike = format === 'json' || format === 'csv';
+
   const getChildPath = (node: XmlNode, path: string, child: XmlNode) => {
-    if (format === 'json' && node.jsonType === 'array') return `${path}[]`;
+    if (isJsonLike && node.jsonType === 'array') return `${path}[]`;
     return `${path}/${child.tag}${child.loopId ? '[]' : ''}`;
   };
 
@@ -118,7 +120,7 @@ const useTree = ({
   const treeSuggestions = useMemo(() => {
     if (!root) return [] as string[];
     const paths: string[] = [];
-    if (format === 'json') {
+    if (isJsonLike) {
       collectJsonPaths(root, `/${root.tag}`, paths);
     } else {
       collectPaths(root, `/${root.tag}`, paths);
@@ -294,9 +296,9 @@ const useTree = ({
     const queryActive = query.length > 0;
     const matches = nodeHasMatch(node, path, query);
     const hasChildren = node.children.length > 0;
-    const isJsonArray = format === 'json' && node.jsonType === 'array';
+    const isJsonArray = isJsonLike && node.jsonType === 'array';
     const loopKey = node.loopId
-      ? format === 'json'
+      ? isJsonLike
         ? node.loopId
         : normalizeLoopId(node.loopId)
       : '';
@@ -308,7 +310,7 @@ const useTree = ({
 
     const isExpanded = queryActive ? true : expandedMap[templatePath] ?? false;
 
-    const label = format === 'json'
+    const label = isJsonLike
       ? node.jsonType === 'array'
         ? `${node.tag}[]`
         : node.tag
@@ -354,7 +356,7 @@ const useTree = ({
           {loopBadge}
           <span className="tree-path" dangerouslySetInnerHTML={{ __html: pathLabel }} />
           <span className="tree-actions">
-            {node.loopId ? (
+            {node.loopId && format !== 'csv' ? (
               <>
                 <button
                   type="button"
@@ -422,7 +424,7 @@ const useTree = ({
             )}
             {node.children.map((child) => {
               const childLoopKey = child.loopId
-                ? format === 'json'
+                ? isJsonLike
                   ? child.loopId
                   : normalizeLoopId(child.loopId)
                 : '';
