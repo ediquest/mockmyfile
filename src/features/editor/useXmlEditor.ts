@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
+import type { DataFormat, FieldSetting, LoopSetting, Relation, StatusMessage, XmlNode } from '../../core/types';
 import { parseXml } from '../../core/xml/parse';
 import { parseJson } from '../../core/json/parse';
 import { parseCsv } from '../../core/csv/parse';
@@ -17,7 +17,7 @@ export type UseXmlEditorArgs = {
   setFields: Dispatch<SetStateAction<FieldSetting[]>>;
   setLoops: Dispatch<SetStateAction<LoopSetting[]>>;
   setRelations: Dispatch<SetStateAction<Relation[]>>;
-  setStatus: (value: string) => void;
+  setStatus: (value: StatusMessage | null) => void;
   setExpandedMap: Dispatch<SetStateAction<Record<string, boolean>>>;
   setShowLoopInstances: Dispatch<SetStateAction<boolean>>;
   setCsvDelimiter: (value: string) => void;
@@ -127,7 +127,7 @@ const useXmlEditor = ({
     }
 
     if (xmlError) {
-      setStatus(xmlError);
+      setStatus({ text: xmlError });
       return;
     }
 
@@ -138,10 +138,10 @@ const useXmlEditor = ({
         : parseXml(editedXml);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
-      setStatus(`${t(parsed.errorKey)}${detail}`);
+      setStatus({ text: `${t(parsed.errorKey)}${detail}` });
       return;
     }
-    setStatus(t('status.changesSaved'));
+    setStatus({ key: 'status.changesSaved' });
     setXmlText(editedXml);
     setRoot(parsed.root);
     setFields(parsed.fields);

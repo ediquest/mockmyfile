@@ -67,6 +67,10 @@ export type TemplatePayload = {
   csvDelimiter?: string;
 };
 
+export type StatusMessage =
+  | { key: string; params?: Record<string, string | number> }
+  | { text: string };
+
 export type ParseResult =
   | { ok: false; errorKey: 'error.xmlParse' | 'error.jsonParse' | 'error.csvParse'; errorDetail?: string }
   | {

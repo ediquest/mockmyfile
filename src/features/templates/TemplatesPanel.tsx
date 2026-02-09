@@ -6,6 +6,7 @@ import { NO_PROJECT } from '../../core/constants';
 import type { TemplatePayload } from '../../core/types';
 import type { TemplatesByProject } from './useTemplates';
 import { useI18n } from '../../i18n/I18nProvider';
+import type { Preset } from '../../core/presets';
 
 export type TemplatesPanelProps = {
   templateName: string;
@@ -29,6 +30,8 @@ export type TemplatesPanelProps = {
   ) => void;
   onDownloadTemplate: (tpl: TemplatePayload) => void;
   onDeleteTemplate: (id: string) => void;
+  presetsByTemplate: Record<string, Preset[]>;
+  onApplyPreset: (templateId: string, presetId: string) => void;
   onAddProject: (project: string) => void;
   onRenameProject: (from: string, to: string) => void;
   onAddCategory: (project: string, category: string) => void;
@@ -59,6 +62,8 @@ const TemplatesPanel = ({
   onRenameTemplate,
   onDownloadTemplate,
   onDeleteTemplate,
+  presetsByTemplate,
+  onApplyPreset,
   onAddProject,
   onRenameProject,
   onAddCategory,
@@ -87,6 +92,7 @@ const TemplatesPanel = ({
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<{ project: string; category: string } | null>(null);
   const [blockedDeleteProject, setBlockedDeleteProject] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
+  const [presetTemplateId, setPresetTemplateId] = useState<string | null>(null);
   const originalRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const lastSavedRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -521,6 +527,12 @@ const TemplatesPanel = ({
                                         </button>
                                         <button
                                           className="button ghost"
+                                          onClick={() => setPresetTemplateId(tpl.id)}
+                                        >
+                                          {t('presets.manage')}
+                                        </button>
+                                        <button
+                                          className="button ghost"
                                           onClick={() => onDownloadTemplate(tpl)}
                                         >
                                           {t('templates.download')}
@@ -533,16 +545,21 @@ const TemplatesPanel = ({
                                           {t('templates.close')}
                                         </button>
                                       ) : (
-                                        <button className="button ghost" onClick={() => startEdit(tpl)}>
-                                          {t('templates.edit')}
+                                        <button
+                                          className="icon-btn"
+                                          title={t('templates.edit')}
+                                          onClick={() => startEdit(tpl)}
+                                        >
+                                          ✎
                                         </button>
                                       )}
                                       {!isEditing && (
                                         <button
-                                          className="button danger"
+                                          className="icon-btn danger"
+                                          title={t('templates.delete')}
                                           onClick={() => setConfirmDeleteId(tpl.id)}
                                         >
-                                          {t('templates.delete')}
+                                          🗑
                                         </button>
                                       )}
                                     </div>
@@ -751,6 +768,42 @@ const TemplatesPanel = ({
             </div>
           </>,
           () => setConfirmDeleteId(null),
+        )}
+      {presetTemplateId &&
+        renderModal(
+          <>
+            <h3>{t('presets.title')}</h3>
+            {(presetsByTemplate[presetTemplateId] ?? []).length === 0 && (
+              <p className="muted">{t('presets.none')}</p>
+            )}
+            <div className="template-list">
+              {(presetsByTemplate[presetTemplateId] ?? []).map((preset) => (
+                <div key={preset.id} className="template-item">
+                  <div>
+                    <strong>{preset.name}</strong>
+                    <span>{new Date(preset.createdAt).toLocaleString()}</span>
+                  </div>
+                  <div className="row-actions compact">
+                    <button
+                      className="button ghost"
+                      onClick={() => {
+                        onApplyPreset(presetTemplateId, preset.id);
+                        setPresetTemplateId(null);
+                      }}
+                    >
+                      {t('presets.apply')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setPresetTemplateId(null)}>
+                {t('templates.modalCancel')}
+              </button>
+            </div>
+          </>,
+          () => setPresetTemplateId(null),
         )}
     </section>
   );

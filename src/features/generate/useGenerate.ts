@@ -1,7 +1,7 @@
 ﻿import JSZip from 'jszip';
 import { useMemo } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
-import type { DataFormat, FieldKind, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
+import type { DataFormat, FieldKind, FieldSetting, LoopSetting, Relation, StatusMessage, XmlNode } from '../../core/types';
 import { escapeXml } from '../../core/xml/escape';
 import { escapeCsvValue } from '../../core/csv/utils';
 import { toIsoDate } from '../../core/xml/utils';
@@ -16,7 +16,7 @@ export type UseGenerateArgs = {
   relations: Relation[];
   fileName: string;
   filesToGenerate: number;
-  setStatus: (value: string) => void;
+  setStatus: (value: StatusMessage | null) => void;
 };
 
 const useGenerate = ({
@@ -378,10 +378,10 @@ const useGenerate = ({
       link.download = `${baseName}_generated.zip`;
       link.click();
       URL.revokeObjectURL(url);
-      setStatus(t('status.generateSuccess', { count: filesToGenerate }));
+      setStatus({ key: 'status.generateSuccess', params: { count: filesToGenerate } });
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('status.generateFailed');
-      setStatus(message);
+      const message = error instanceof Error ? error.message : '';
+      setStatus(message ? { text: message } : { key: 'status.generateFailed' });
     }
   };
 

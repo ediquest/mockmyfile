@@ -1,9 +1,16 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from './core/types';
+import type { DataFormat, FieldSetting, LoopSetting, ParseResult, Relation, StatusMessage, XmlNode } from './core/types';
 import { parseXml } from './core/xml/parse';
 import { parseJson } from './core/json/parse';
-import { parseCsv } from './core/csv/parse';
+import { parseCsv, type CsvParseResult } from './core/csv/parse';
+import {
+  deletePresetForTemplate,
+  getPresetsForTemplate,
+  getPresetsMap,
+  savePresetForTemplate,
+  type Preset,
+} from './core/presets';
 import { applyLoopMarker, clearLoopMarker } from './core/xml/tree';
 import { normalizeLoopId } from './core/templates';
 import { BACKUP_FILE_NAME } from './core/constants';
@@ -34,9 +41,11 @@ const App = () => {
   const [loops, setLoops] = useState<LoopSetting[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
   const [filesToGenerate, setFilesToGenerate] = useState(10);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<StatusMessage | null>(null);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const [showLoopInstances, setShowLoopInstances] = useState(false);
+  const [presetsVersion, setPresetsVersion] = useState(0);
+  const pendingPresetRef = useRef<{ templateId: string; preset: Preset } | null>(null);
 
   const updateField = (id: string, patch: Partial<FieldSetting>) => {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
@@ -172,6 +181,98 @@ const App = () => {
     return 'xml';
   };
 
+  const isCsvParsed = (value: ParseResult | CsvParseResult): value is CsvParseResult & { ok: true } =>
+    'delimiter' in value;
+
+  const presetsMap = useMemo(() => getPresetsMap(), [presetsVersion]);
+
+  const applyPreset = (preset: Preset) => {
+    setFields((prev) => {
+      const map = new Map(preset.fields.map((f) => [f.id, f]));
+      return prev.map((field) => {
+        const entry = map.get(field.id);
+        return entry ? { ...field, ...entry } : field;
+      });
+    });
+    setLoops((prev) => {
+      const map = new Map(preset.loops.map((l) => [l.id, l.count]));
+      return prev.map((loop) => {
+        const count = map.get(loop.id);
+        return count !== undefined ? { ...loop, count } : loop;
+      });
+    });
+    setRelations((prev) => {
+      const map = new Map(preset.relations.map((r) => [r.id, r]));
+      return prev.map((rel) => {
+        const entry = map.get(rel.id);
+        return entry ? { ...rel, ...entry } : rel;
+      });
+    });
+  };
+
+  useEffect(() => {
+    const pending = pendingPresetRef.current;
+    if (!pending) return;
+    if (templates.activeTemplateId !== pending.templateId) return;
+    applyPreset(pending.preset);
+    pendingPresetRef.current = null;
+  }, [templates.activeTemplateId, fields, loops, relations]);
+
+  const handleSavePreset = (name: string) => {
+    if (!templates.activeTemplateId) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const preset: Preset = {
+      id: `preset-${Date.now()}`,
+      name: trimmed,
+      createdAt: new Date().toISOString(),
+      fields: fields
+        .filter((field) => field.mode !== 'same')
+        .map((field) => ({
+          id: field.id,
+          mode: field.mode,
+          fixedValue: field.fixedValue,
+          step: field.step,
+          min: field.min,
+          max: field.max,
+          length: field.length,
+          dateSpanDays: field.dateSpanDays,
+        })),
+      loops: loops.map((loop) => ({ id: loop.id, count: loop.count })),
+      relations: relations.map((rel) => ({
+        id: rel.id,
+        enabled: rel.enabled,
+        prefix: rel.prefix,
+        suffix: rel.suffix,
+      })),
+    };
+    savePresetForTemplate(templates.activeTemplateId, preset);
+    setPresetsVersion((v) => v + 1);
+    setStatus({ key: 'presets.saved' });
+  };
+
+  const handleApplyPreset = (templateId: string, presetId: string) => {
+    const presets = getPresetsForTemplate(templateId);
+    const preset = presets.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    if (templates.activeTemplateId !== templateId) {
+      const tpl = templates.templates.find((t) => t.id === templateId);
+      if (tpl) {
+        templates.loadTemplate(tpl);
+      }
+      pendingPresetRef.current = { templateId, preset };
+      return;
+    }
+
+    applyPreset(preset);
+  };
+
+  const handleDeletePreset = (templateId: string, presetId: string) => {
+    deletePresetForTemplate(templateId, presetId);
+    setPresetsVersion((v) => v + 1);
+  };
+
   const handleFile = async (file: File) => {
     const text = await file.text();
     const nextFormat = detectFormat(file.name, text);
@@ -182,21 +283,24 @@ const App = () => {
         : parseXml(text);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
-      setStatus(`${t(parsed.errorKey)}${detail}`);
+      setStatus({ text: `${t(parsed.errorKey)}${detail}` });
       return;
     }
-    setStatus('');
+    setStatus(null);
     setFormat(nextFormat);
-    if (nextFormat === 'csv' && 'delimiter' in parsed) {
+    if (nextFormat === 'csv' && isCsvParsed(parsed)) {
       setCsvDelimiter(parsed.delimiter);
     }
     setXmlText(text);
     setEditedXml(text);
     setXmlError('');
+    const nextDelimiter = nextFormat === 'csv' && isCsvParsed(parsed)
+      ? parsed.delimiter
+      : csvDelimiter;
     templates.syncFromUpload(
       file,
       nextFormat,
-      nextFormat === 'csv' && 'delimiter' in parsed ? parsed.delimiter : csvDelimiter,
+      nextDelimiter,
       parsed.root,
       parsed.fields,
       parsed.loops,
@@ -221,7 +325,7 @@ const App = () => {
     link.download = BACKUP_FILE_NAME;
     link.click();
     URL.revokeObjectURL(url);
-    setStatus(t('status.backupExported'));
+    setStatus({ key: 'status.backupExported' });
   };
 
   const importBackup = async (file: File) => {
@@ -249,9 +353,9 @@ const App = () => {
       templates.setProjectFilter('');
       templates.setActiveTemplateId('');
       clearLastId();
-      setStatus(t('status.backupImported'));
+      setStatus({ key: 'status.backupImported' });
     } catch {
-      setStatus(t('status.backupImportFailed'));
+      setStatus({ key: 'status.backupImportFailed' });
     }
   };
 
@@ -281,7 +385,11 @@ const App = () => {
         </select>
       </div>
       <UploadHero fileInputRef={fileInputRef} onFile={(file) => void handleFile(file)} />
-      {!root && status && <p className="status">{status}</p>}
+      {!root && status && (
+        <p className="status">
+          {'key' in status ? t(status.key as never, status.params as never) : status.text}
+        </p>
+      )}
 
       <TemplatesPanel
         templateName={templates.templateName}
@@ -314,6 +422,8 @@ const App = () => {
           URL.revokeObjectURL(url);
         }}
         onDeleteTemplate={templates.deleteTemplate}
+        presetsByTemplate={presetsMap}
+        onApplyPreset={handleApplyPreset}
         onAddProject={templates.addProject}
         onDeleteProject={templates.deleteProject}
         onRenameProject={templates.renameProject}
@@ -373,6 +483,17 @@ const App = () => {
           status={status}
           fields={fields}
           updateField={updateField}
+          presets={templates.activeTemplateId ? presetsMap[templates.activeTemplateId] ?? [] : []}
+          canSavePreset={Boolean(templates.activeTemplateId)}
+          onSavePreset={handleSavePreset}
+          onApplyPreset={(presetId) => {
+            if (!templates.activeTemplateId) return;
+            handleApplyPreset(templates.activeTemplateId, presetId);
+          }}
+          onDeletePreset={(presetId) => {
+            if (!templates.activeTemplateId) return;
+            handleDeletePreset(templates.activeTemplateId, presetId);
+          }}
         />
       )}
 
@@ -388,6 +509,14 @@ const App = () => {
 };
 
 export default App;
+
+
+
+
+
+
+
+
 
 
 

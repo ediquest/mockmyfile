@@ -1,13 +1,20 @@
-import type { FieldSetting } from '../../core/types';
+import { useState } from 'react';
+import type { FieldSetting, StatusMessage } from '../../core/types';
+import type { Preset } from '../../core/presets';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type GeneratePanelProps = {
   filesToGenerate: number;
   setFilesToGenerate: (value: number) => void;
   generateZip: () => void;
-  status: string;
+  status: StatusMessage | null;
   fields: FieldSetting[];
   updateField: (id: string, patch: Partial<FieldSetting>) => void;
+  presets: Preset[];
+  canSavePreset: boolean;
+  onSavePreset: (name: string) => void;
+  onApplyPreset: (presetId: string) => void;
+  onDeletePreset: (presetId: string) => void;
 };
 
 const GeneratePanel = ({
@@ -17,8 +24,21 @@ const GeneratePanel = ({
   status,
   fields,
   updateField,
+  presets,
+  canSavePreset,
+  onSavePreset,
+  onApplyPreset,
+  onDeletePreset,
 }: GeneratePanelProps) => {
   const { t } = useI18n();
+  const [presetName, setPresetName] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [confirmDeletePreset, setConfirmDeletePreset] = useState<string | null>(null);
+  const statusText = status
+    ? 'key' in status
+      ? t(status.key as never, status.params as never)
+      : status.text
+    : '';
 
   return (
     <section className="panel">
@@ -32,11 +52,66 @@ const GeneratePanel = ({
           value={filesToGenerate}
           onChange={(e) => setFilesToGenerate(Number(e.target.value) || 1)}
         />
+        <button className="button primary" onClick={() => void generateZip()}>
+          {t('generate.downloadZip')}
+        </button>
       </div>
-      <button className="button primary" onClick={() => void generateZip()}>
-        {t('generate.downloadZip')}
-      </button>
-      {status && <p className="status">{status}</p>}
+      <div className="panel-row">
+        <div className="panel-actions">
+          <input
+            className="input"
+            placeholder={t('presets.namePlaceholder')}
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            disabled={!canSavePreset}
+          />
+          <button
+            className="button ghost"
+            onClick={() => {
+              const trimmed = presetName.trim();
+              if (!trimmed) return;
+              onSavePreset(trimmed);
+              setPresetName('');
+            }}
+            disabled={!canSavePreset}
+          >
+            {t('presets.save')}
+          </button>
+          <select
+            className="input"
+            value={selectedPreset}
+            onChange={(e) => setSelectedPreset(e.target.value)}
+          >
+            <option value="">{t('presets.select')}</option>
+            {presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="button ghost"
+            onClick={() => {
+              if (!selectedPreset) return;
+              onApplyPreset(selectedPreset);
+            }}
+            disabled={!selectedPreset}
+          >
+            {t('presets.apply')}
+          </button>
+          <button
+            className="button danger"
+            onClick={() => {
+              if (!selectedPreset) return;
+              setConfirmDeletePreset(selectedPreset);
+            }}
+            disabled={!selectedPreset}
+          >
+            {t('presets.delete')}
+          </button>
+        </div>
+      </div>
+      {statusText && <p className="status">{statusText}</p>}
       <div className="summary">
         <h3>{t('generate.summaryTitle')}</h3>
         {fields.filter((field) => field.mode !== 'same').length === 0 && (
@@ -87,6 +162,34 @@ const GeneratePanel = ({
             </div>
           ))}
       </div>
+      {confirmDeletePreset && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setConfirmDeletePreset(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>{t('presets.deleteConfirmTitle')}</h3>
+            <p>{t('presets.deleteConfirmMessage')}</p>
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setConfirmDeletePreset(null)}>
+                {t('templates.modalCancel')}
+              </button>
+              <button
+                className="button danger"
+                onClick={() => {
+                  onDeletePreset(confirmDeletePreset);
+                  setConfirmDeletePreset(null);
+                  setSelectedPreset('');
+                }}
+              >
+                {t('presets.delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

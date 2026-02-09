@@ -4,6 +4,7 @@ import type {
   FieldSetting,
   LoopSetting,
   Relation,
+  StatusMessage,
   TemplatePayload,
   XmlNode,
 } from '../../core/types';
@@ -53,7 +54,7 @@ export type UseTemplatesArgs = {
   setLoops: (value: LoopSetting[]) => void;
   setRelations: (value: Relation[]) => void;
   setFileName: (value: string) => void;
-  setStatus: (value: string) => void;
+  setStatus: (value: StatusMessage | null) => void;
   setExpandedMap: (value: Record<string, boolean>) => void;
   setEditedXml: (value: string) => void;
   setXmlError: (value: string) => void;
@@ -183,7 +184,7 @@ const useTemplates = ({
     persistTemplates(next);
     setTemplateList(next);
     persistLastId(id);
-    setStatus(t('status.templateSaved'));
+    setStatus({ key: 'status.templateSaved' });
     if (trimmedProject && !projects.includes(trimmedProject)) {
       const updated = [...projects, trimmedProject].sort();
       setProjects(updated);
@@ -223,11 +224,11 @@ const useTemplates = ({
         : parseXml(normalized.xmlText);
     if (!parsed.ok) {
       const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
-      setStatus(`${t(parsed.errorKey)}${detail}`);
+      setStatus({ text: `${t(parsed.errorKey)}${detail}` });
       return;
     }
     setRoot(parsed.root);
-    setStatus(t('status.templateLoaded'));
+    setStatus({ key: 'status.templateLoaded' });
     setActiveTemplateId(normalized.id);
     const paths: string[] = [];
     if (normalized.format === 'json' || normalized.format === 'csv') {
@@ -358,6 +359,12 @@ const useTemplates = ({
     };
     setCategoriesMap(next);
     persistCategories(next);
+  };
+
+  const setCategoriesFromImport = (map: Record<string, string[]>) => {
+    const normalized = normalizeCategoriesMap(map);
+    setCategoriesMap(normalized);
+    persistCategories(normalized);
   };
 
   const deleteProject = (project: string) => {
@@ -527,6 +534,7 @@ const useTemplates = ({
     addCategory,
     renameCategory,
     deleteCategory,
+    setCategoriesFromImport,
     deleteProject,
     renameProject,
     categoriesMap,
