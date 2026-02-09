@@ -3,6 +3,10 @@
 export const detectKind = (value: string) => {
   const trimmed = value.trim();
   if (trimmed.length === 0) return 'text' as const;
+  if (trimmed.toLowerCase() === 'true' || trimmed.toLowerCase() === 'false') {
+    return 'boolean' as const;
+  }
+  if (trimmed.toLowerCase() === 'null') return 'null' as const;
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return 'number' as const;
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
     const dt = new Date(trimmed);

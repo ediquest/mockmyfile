@@ -1,12 +1,13 @@
 ﻿import JSZip from 'jszip';
 import { useMemo } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
-import type { FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
+import type { DataFormat, FieldKind, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { escapeXml } from '../../core/xml/escape';
 import { toIsoDate } from '../../core/xml/utils';
-import { getBaseName, normalizeId, stripLoopMarkers } from '../../core/templates';
+import { getBaseName, normalizeId, normalizeLoopId, stripLoopMarkers } from '../../core/templates';
 
 export type UseGenerateArgs = {
+  format: DataFormat;
   root: XmlNode | null;
   fields: FieldSetting[];
   loops: LoopSetting[];
@@ -17,6 +18,7 @@ export type UseGenerateArgs = {
 };
 
 const useGenerate = ({
+  format,
   root,
   fields,
   loops,
@@ -76,6 +78,22 @@ const useGenerate = ({
 
     const field = fieldMap.get(templateId);
     if (!field) return '';
+
+    if (field.kind === 'null') {
+      cache.set(cacheKey, 'null');
+      return 'null';
+    }
+
+    if (field.kind === 'boolean') {
+      let value = field.value.toLowerCase() === 'false' ? 'false' : 'true';
+      if (field.mode === 'fixed') {
+        value = field.fixedValue.toLowerCase() === 'false' ? 'false' : 'true';
+      } else if (field.mode === 'random') {
+        value = Math.random() < 0.5 ? 'true' : 'false';
+      }
+      cache.set(cacheKey, value);
+      return value;
+    }
 
     const indexOffset = fileIndex + Object.values(loopIndexMap).reduce((a, b) => a + b, 0);
     const usedSet = (() => {
@@ -179,6 +197,20 @@ const useGenerate = ({
     return value;
   };
 
+  const coerceJsonValue = (raw: string, kind?: FieldKind, forceString?: boolean) => {
+    if (forceString) return String(raw);
+    if (!kind) return raw;
+    if (kind === 'number') {
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : 0;
+    }
+    if (kind === 'boolean') {
+      return raw.toLowerCase() === 'true';
+    }
+    if (kind === 'null') return null;
+    return raw;
+  };
+
   const serializeNode = (
     node: XmlNode,
     path: string,
@@ -235,6 +267,52 @@ const useGenerate = ({
     return `<${node.tag}${attrs}>${children}</${node.tag}>`;
   };
 
+  const buildJsonValue = (
+    node: XmlNode,
+    path: string,
+    fileIndex: number,
+    loopIndexMap: Record<string, number>,
+    cache: Map<string, string>,
+    usedValues: Map<string, Set<string>>,
+  ): unknown => {
+    const templatePath = normalizeId(path.replace(/\[\d+\]/g, '[]'));
+    if (node.jsonType === 'value') {
+      const field = getFieldEntry(templatePath);
+      const kind = field?.kind ?? node.jsonValueKind;
+      const forceString = node.jsonOriginalType === 'string';
+      const value = field
+        ? resolveValue(field.id, fileIndex, loopIndexMap, cache, usedValues)
+        : node.jsonValue ?? '';
+      return coerceJsonValue(value, kind, forceString);
+    }
+
+    if (node.jsonType === 'array') {
+      const item = node.children[0];
+      if (!item) return [];
+      const loopId = node.loopId ?? (format === 'json' ? `${path}[]` : normalizeLoopId(`${path}[]`));
+      const count = loopCountMap.get(loopId) ?? 1;
+      const items: unknown[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const nextLoop = { ...loopIndexMap, [loopId]: i };
+        items.push(buildJsonValue(item, `${path}[]`, fileIndex, nextLoop, cache, usedValues));
+      }
+      return items;
+    }
+
+    const obj: Record<string, unknown> = {};
+    node.children.forEach((child) => {
+      obj[child.tag] = buildJsonValue(
+        child,
+        `${path}/${child.tag}`,
+        fileIndex,
+        loopIndexMap,
+        cache,
+        usedValues,
+      );
+    });
+    return obj;
+  };
+
   const generateZip = async () => {
     if (!root) return;
     try {
@@ -243,10 +321,17 @@ const useGenerate = ({
       const usedValues = new Map<string, Set<string>>();
       for (let i = 0; i < filesToGenerate; i += 1) {
         const cache = new Map<string, string>();
-        const content = serializeNode(root, `/${root.tag}`, i, {}, cache, usedValues);
-        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
-        const fileLabel = `${baseName}_${i + 1}.xml`;
-        zip.file(fileLabel, xml);
+        if (format === 'json') {
+          const jsonValue = buildJsonValue(root, `/${root.tag}`, i, {}, cache, usedValues);
+          const json = `${JSON.stringify(jsonValue, null, 2)}\n`;
+          const fileLabel = `${baseName}_${i + 1}.json`;
+          zip.file(fileLabel, json);
+        } else {
+          const content = serializeNode(root, `/${root.tag}`, i, {}, cache, usedValues);
+          const xml = `<?xml version="1.0" encoding="UTF-8"?>\n${content}`;
+          const fileLabel = `${baseName}_${i + 1}.xml`;
+          zip.file(fileLabel, xml);
+        }
       }
       const blob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(blob);

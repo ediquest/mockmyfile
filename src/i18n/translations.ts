@@ -8,7 +8,7 @@ export const translations = {
     'hero.subtitle':
       'Wgraj XML, ustaw reguły, wykryj relacje i wygeneruj paczkę danych do testów.',
     'hero.dropzoneTitle': 'Drag & Drop',
-    'hero.dropzoneHint': 'Upuść plik XML tutaj lub kliknij, aby wybrać',
+    'hero.dropzoneHint': 'Upuść plik XML lub JSON tutaj lub kliknij, aby wybrać',
     'templates.title': 'Szablony',
     'templates.subtitle': 'Zapisywane lokalnie w przeglądarce.',
     'templates.templateNamePlaceholder': 'Nazwa szablonu',
@@ -93,6 +93,7 @@ export const translations = {
     'generate.increment': 'Inkrementacja: +{step}',
     'generate.randomNumber': 'Random liczby',
     'generate.randomText': 'Random tekst',
+    'generate.randomBoolean': 'Losowa wartość logiczna',
     'generate.randomDate': 'Random data',
     'generate.randomDigits': '{count} cyfr',
     'generate.randomRange': '{min}-{max}',
@@ -114,6 +115,8 @@ export const translations = {
     'status.uniqueValuesError':
       'Brak unikalnych wartości dla pola "{field}". Zmień parametry random.',
     'error.xmlParse': 'Nie udało się sparsować XML. Sprawdź poprawność pliku.',
+    'error.jsonParse': 'Nie udało się sparsować JSON. Sprawdź poprawność pliku.',
+    'error.jsonSyntaxGeneric': 'Błąd składni JSON — popraw plik przed zapisem.',
     'error.xmlSyntaxLineCol': 'Błąd składni XML — linia {line}, kolumna {col}.',
     'error.xmlSyntaxLine': 'Błąd składni XML — linia {line}.',
     'error.xmlSyntaxGeneric': 'Błąd składni XML — popraw plik przed zapisem.',
@@ -128,7 +131,7 @@ export const translations = {
     'hero.subtitle':
       'Upload XML, configure rules, detect relations, and generate a test data bundle.',
     'hero.dropzoneTitle': 'Drag & Drop',
-    'hero.dropzoneHint': 'Drop an XML file here or click to choose',
+    'hero.dropzoneHint': 'Drop an XML or JSON file here or click to choose',
     'templates.title': 'Templates',
     'templates.subtitle': 'Saved locally in the browser.',
     'templates.templateNamePlaceholder': 'Template name',
@@ -213,6 +216,7 @@ export const translations = {
     'generate.increment': 'Increment: +{step}',
     'generate.randomNumber': 'Random numbers',
     'generate.randomText': 'Random text',
+    'generate.randomBoolean': 'Random boolean value',
     'generate.randomDate': 'Random date',
     'generate.randomDigits': '{count} digits',
     'generate.randomRange': '{min}-{max}',
@@ -234,6 +238,8 @@ export const translations = {
     'status.uniqueValuesError':
       'No unique values left for "{field}". Change random parameters.',
     'error.xmlParse': 'Failed to parse XML. Please check the file format.',
+    'error.jsonParse': 'Failed to parse JSON. Please check the file format.',
+    'error.jsonSyntaxGeneric': 'JSON syntax error — fix the file before saving.',
     'error.xmlSyntaxLineCol': 'XML syntax error — line {line}, column {col}.',
     'error.xmlSyntaxLine': 'XML syntax error — line {line}.',
     'error.xmlSyntaxGeneric': 'XML syntax error — fix the file before saving.',

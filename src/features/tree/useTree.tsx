@@ -1,6 +1,7 @@
-﻿import { useMemo, useRef, useState } from 'react';
-import type { FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
+import { useMemo, useRef, useState } from 'react';
+import type { DataFormat, FieldKind, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { collectPaths } from '../../core/xml/tree';
+import { collectJsonPaths } from '../../core/json/tree';
 import { MAX_SUGGESTIONS } from '../../core/constants';
 import { highlightText } from '../../core/xml/highlight';
 import { normalizeId, normalizeLoopId, stripLoopMarkers } from '../../core/templates';
@@ -8,6 +9,7 @@ import { getExpandedKey } from '../../core/storage';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type UseTreeArgs = {
+  format: DataFormat;
   root: XmlNode | null;
   fields: FieldSetting[];
   loops: LoopSetting[];
@@ -22,7 +24,14 @@ export type UseTreeArgs = {
   removeLoopAt: (templatePath: string) => void;
 };
 
+const getAllowedModes = (kind: FieldKind) => {
+  if (kind === 'boolean') return ['same', 'fixed', 'random'] as const;
+  if (kind === 'null') return ['same'] as const;
+  return ['same', 'fixed', 'increment', 'random'] as const;
+};
+
 const useTree = ({
+  format,
   root,
   fields,
   loops,
@@ -85,25 +94,38 @@ const useTree = ({
   const getFieldEntry = (templatePath: string) =>
     fieldMap.get(templatePath) ?? fieldMap.get(stripLoopMarkers(templatePath));
 
+  const getChildPath = (node: XmlNode, path: string, child: XmlNode) => {
+    if (format === 'json' && node.jsonType === 'array') return `${path}[]`;
+    return `${path}/${child.tag}${child.loopId ? '[]' : ''}`;
+  };
+
   const nodeHasMatch = (node: XmlNode, path: string, query: string): boolean => {
     if (!query) return true;
     const templatePath = normalizeId(path.replace(/\[\d+\]/g, '[]'));
     if (templatePath.toLowerCase().includes(query)) return true;
     if (node.tag.toLowerCase().includes(query)) return true;
-    if (node.attrs.some((attr) => attr.name.toLowerCase().includes(query))) return true;
-    if (node.text && node.text.toLowerCase().includes(query)) return true;
+    if (format === 'xml') {
+      if (node.attrs.some((attr) => attr.name.toLowerCase().includes(query))) return true;
+      if (node.text && node.text.toLowerCase().includes(query)) return true;
+    } else {
+      if (node.jsonValue && node.jsonValue.toLowerCase().includes(query)) return true;
+    }
     return node.children.some((child) =>
-      nodeHasMatch(child, `${path}/${child.tag}${child.loopId ? '[]' : ''}`, query),
+      nodeHasMatch(child, getChildPath(node, path, child), query),
     );
   };
 
-    const treeSuggestions = useMemo(() => {
+  const treeSuggestions = useMemo(() => {
     if (!root) return [] as string[];
     const paths: string[] = [];
-    collectPaths(root, `/${root.tag}`, paths);
+    if (format === 'json') {
+      collectJsonPaths(root, `/${root.tag}`, paths);
+    } else {
+      collectPaths(root, `/${root.tag}`, paths);
+    }
     const normalized = paths.map((p) => p.replace(/^\//, ''));
     return Array.from(new Set(normalized));
-  }, [root]);
+  }, [root, format]);
 
   const filteredSuggestions = useMemo(() => {
     const query = treeQuery.trim().toLowerCase();
@@ -112,16 +134,21 @@ const useTree = ({
       .filter((path) => path.toLowerCase().includes(query))
       .slice(0, MAX_SUGGESTIONS);
   }, [treeQuery, treeSuggestions]);
+
   const renderFieldControls = (field: FieldSetting) => {
     const relation = relationByDependent.get(field.id);
     const locked = Boolean(relation);
+    const allowedModes = getAllowedModes(field.kind);
+    const mode = allowedModes.includes(field.mode as (typeof allowedModes)[number])
+      ? field.mode
+      : 'same';
 
     return (
       <div className="field-controls">
         <label>
           {t('field.mode')}
           <select
-            value={field.mode}
+            value={mode}
             disabled={locked}
             onChange={(e) =>
               updateField(field.id, {
@@ -129,13 +156,17 @@ const useTree = ({
               })
             }
           >
-            <option value="same">{t('field.mode.same')}</option>
-            <option value="fixed">{t('field.mode.fixed')}</option>
-            <option value="increment">{t('field.mode.increment')}</option>
-            <option value="random">{t('field.mode.random')}</option>
+            {allowedModes.map((item) => (
+              <option key={item} value={item}>
+                {item === 'same' && t('field.mode.same')}
+                {item === 'fixed' && t('field.mode.fixed')}
+                {item === 'increment' && t('field.mode.increment')}
+                {item === 'random' && t('field.mode.random')}
+              </option>
+            ))}
           </select>
         </label>
-        {field.mode === 'fixed' && (
+        {mode === 'fixed' && field.kind !== 'boolean' && field.kind !== 'null' && (
           <label>
             {t('field.value')}
             <input
@@ -146,7 +177,20 @@ const useTree = ({
             />
           </label>
         )}
-        {field.mode === 'increment' && (
+        {mode === 'fixed' && field.kind === 'boolean' && (
+          <label>
+            {t('field.value')}
+            <select
+              value={field.fixedValue.toLowerCase() === 'false' ? 'false' : 'true'}
+              disabled={locked}
+              onChange={(e) => updateField(field.id, { fixedValue: e.target.value })}
+            >
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+        )}
+        {mode === 'increment' && (
           <label>
             {t('field.step')}
             <input
@@ -158,7 +202,7 @@ const useTree = ({
             />
           </label>
         )}
-        {field.mode === 'random' && field.kind === 'number' && (
+        {mode === 'random' && field.kind === 'number' && (
           <label>
             {t('field.range')}
             <div className="split">
@@ -179,7 +223,7 @@ const useTree = ({
             </div>
           </label>
         )}
-        {field.mode === 'random' && field.kind === 'number' && (
+        {mode === 'random' && field.kind === 'number' && (
           <label>
             {t('field.lengthDigits')}
             <input
@@ -191,7 +235,7 @@ const useTree = ({
             />
           </label>
         )}
-        {field.mode === 'random' && field.kind === 'text' && (
+        {mode === 'random' && field.kind === 'text' && (
           <label>
             {t('field.length')}
             <input
@@ -203,7 +247,7 @@ const useTree = ({
             />
           </label>
         )}
-        {field.mode === 'random' && field.kind === 'date' && (
+        {mode === 'random' && field.kind === 'date' && (
           <label>
             {t('field.daysRange')}
             <input
@@ -250,7 +294,12 @@ const useTree = ({
     const queryActive = query.length > 0;
     const matches = nodeHasMatch(node, path, query);
     const hasChildren = node.children.length > 0;
-    const loopKey = node.loopId ? normalizeLoopId(node.loopId) : '';
+    const isJsonArray = format === 'json' && node.jsonType === 'array';
+    const loopKey = node.loopId
+      ? format === 'json'
+        ? node.loopId
+        : normalizeLoopId(node.loopId)
+      : '';
     const loopCount = loopKey ? loopCountMap.get(loopKey) ?? 1 : 1;
 
     if (queryActive && !matches) {
@@ -259,9 +308,12 @@ const useTree = ({
 
     const isExpanded = queryActive ? true : expandedMap[templatePath] ?? false;
 
-    const tagLabel = queryActive
-      ? highlightText(`&lt;${node.tag}&gt;`, query)
+    const label = format === 'json'
+      ? node.jsonType === 'array'
+        ? `${node.tag}[]`
+        : node.tag
       : `&lt;${node.tag}&gt;`;
+    const tagLabel = queryActive ? highlightText(label, query) : label;
     const pathLabel = queryActive ? highlightText(templatePath, query) : templatePath;
 
     return (
@@ -324,35 +376,39 @@ const useTree = ({
                 >
                   -1
                 </button>
-                <button
-                  type="button"
-                  className="tree-action danger"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    removeLoopAt(templatePath);
-                  }}
-                >
-                  {t('field.deleteLoop')}
-                </button>
+                {format === 'xml' && (
+                  <button
+                    type="button"
+                    className="tree-action danger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeLoopAt(templatePath);
+                    }}
+                  >
+                    {t('field.deleteLoop')}
+                  </button>
+                )}
                 <span className="loop-count">x{loopCount}</span>
               </>
             ) : (
-              <button
-                type="button"
-                className="tree-action"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  addLoopAt(templatePath);
-                }}
-              >
-                {t('field.duplicate')}
-              </button>
+              format === 'xml' && (
+                <button
+                  type="button"
+                  className="tree-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    addLoopAt(templatePath);
+                  }}
+                >
+                  {t('field.duplicate')}
+                </button>
+              )
             )}
           </span>
         </div>
         {isExpanded && (
           <div className="tree-content">
-            {node.attrs.length > 0 && (
+            {format === 'xml' && node.attrs.length > 0 && (
               <div className="tree-attrs">
                 {node.attrs.map((attr) => (
                   <div key={`${templatePath}/@${attr.name}`}>
@@ -361,14 +417,37 @@ const useTree = ({
                 ))}
               </div>
             )}
-            {node.children.length === 0 && node.text !== undefined && (
+            {node.children.length === 0 && (node.text !== undefined || node.jsonType === 'value') && (
               <div className="tree-text">{renderFieldBlock(templatePath, t('field.valueField'))}</div>
             )}
             {node.children.map((child) => {
-              const childLoopKey = child.loopId ? normalizeLoopId(child.loopId) : '';
+              const childLoopKey = child.loopId
+                ? format === 'json'
+                  ? child.loopId
+                  : normalizeLoopId(child.loopId)
+                : '';
               const childLoopCount = childLoopKey ? loopCountMap.get(childLoopKey) ?? 1 : 1;
-              const childPath = `${path}/${child.tag}${child.loopId ? '[]' : ''}`;
+              const childPath = getChildPath(node, path, child);
               if (queryActive && !nodeHasMatch(child, childPath, query)) return null;
+
+              if (isJsonArray && showLoopInstances) {
+                return (
+                  <div key={`${templatePath}/${child.tag}-instances`}>
+                    {Array.from({ length: loopCount }).map((_, index) => (
+                      <div
+                        key={`${templatePath}/${child.tag}[${index}]`}
+                        className="loop-instance"
+                      >
+                        <div className="loop-label">
+                          {t('field.iteration', { index: index + 1 })}
+                        </div>
+                        {renderNodeEditor(child, `${path}[${index}]`, depth + 1)}
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+
               return child.loopId && showLoopInstances ? (
                 <div key={`${templatePath}/${child.tag}-instances`}>
                   {Array.from({ length: childLoopCount }).map((_, index) => (
@@ -379,7 +458,7 @@ const useTree = ({
                       <div className="loop-label">
                         {t('field.iteration', { index: index + 1 })}
                       </div>
-                      {renderNodeEditor(child, `${path}/${child.tag}[${index}]`, depth + 1)}
+                      {renderNodeEditor(child, `${childPath.replace(/\[\]$/, '')}[${index}]`, depth + 1)}
                     </div>
                   ))}
                 </div>
@@ -459,11 +538,13 @@ const useTree = ({
     });
   };
 
-  return {    treeQuery,
+  return {
+    treeQuery,
     setTreeQuery,
     showSuggestions,
     setShowSuggestions,
-    searchWrapRef,    filteredSuggestions,
+    searchWrapRef,
+    filteredSuggestions,
     renderNodeEditor,
     expandAll,
     collapseAll,
@@ -473,10 +554,3 @@ const useTree = ({
 };
 
 export default useTree;
-
-
-
-
-
-
-

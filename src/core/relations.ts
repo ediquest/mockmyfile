@@ -8,7 +8,8 @@ export const detectRelations = (fields: FieldSetting[]): Relation[] => {
   for (const field of fields) {
     const v = field.value.trim();
     if (v.length < MIN_RELATION_LENGTH) continue;
-    if (BOOLEAN_VALUES.has(v.toLowerCase())) continue;
+    const lowered = v.toLowerCase();
+    if (BOOLEAN_VALUES.has(lowered) || lowered === 'null') continue;
     if (!byValue.has(v)) byValue.set(v, []);
     byValue.get(v)!.push(field);
   }

@@ -1,7 +1,11 @@
-﻿export type XmlAttr = {
+export type XmlAttr = {
   name: string;
   value: string;
 };
+
+export type DataFormat = 'xml' | 'json';
+
+export type JsonNodeType = 'object' | 'array' | 'value';
 
 export type XmlNode = {
   tag: string;
@@ -9,9 +13,13 @@ export type XmlNode = {
   children: XmlNode[];
   text?: string;
   loopId?: string;
+  jsonType?: JsonNodeType;
+  jsonValue?: string;
+  jsonValueKind?: FieldKind;
+  jsonOriginalType?: 'string' | 'number' | 'boolean' | 'null';
 };
 
-export type FieldKind = 'text' | 'number' | 'date';
+export type FieldKind = 'text' | 'number' | 'date' | 'boolean' | 'null';
 
 export type FieldMode = 'same' | 'increment' | 'random' | 'fixed';
 
@@ -55,10 +63,11 @@ export type TemplatePayload = {
   loops: LoopSetting[];
   relations: Relation[];
   fileName: string;
+  format?: DataFormat;
 };
 
 export type ParseResult =
-  | { ok: false; errorKey: 'error.xmlParse' }
+  | { ok: false; errorKey: 'error.xmlParse' | 'error.jsonParse'; errorDetail?: string }
   | {
       ok: true;
       root: XmlNode;

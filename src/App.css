@@ -779,6 +779,22 @@ select {
   color: #2563eb;
 }
 
+.json-key {
+  color: #2563eb;
+}
+
+.json-string {
+  color: #7c3aed;
+}
+
+.json-number {
+  color: #16a34a;
+}
+
+.json-literal {
+  color: #b45309;
+}
+
 .xml-attr {
   color: #b45309;
 }

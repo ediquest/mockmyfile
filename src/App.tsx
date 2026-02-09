@@ -1,7 +1,8 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import './App.css';
-import type { FieldSetting, LoopSetting, Relation, XmlNode } from './core/types';
+import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from './core/types';
 import { parseXml } from './core/xml/parse';
+import { parseJson } from './core/json/parse';
 import { applyLoopMarker, clearLoopMarker } from './core/xml/tree';
 import { normalizeLoopId } from './core/templates';
 import { BACKUP_FILE_NAME } from './core/constants';
@@ -25,6 +26,7 @@ const App = () => {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const [xmlText, setXmlText] = useState('');
   const [fileName, setFileName] = useState('');
+  const [format, setFormat] = useState<DataFormat>('xml');
   const [root, setRoot] = useState<XmlNode | null>(null);
   const [fields, setFields] = useState<FieldSetting[]>([]);
   const [loops, setLoops] = useState<LoopSetting[]>([]);
@@ -50,6 +52,7 @@ const App = () => {
 
   const addLoopAt = (templatePath: string) => {
     if (!root) return;
+    if (format !== 'xml') return;
     const loopId = normalizeLoopId(
       templatePath.startsWith('/') ? templatePath : `/${templatePath}`,
     );
@@ -68,6 +71,7 @@ const App = () => {
 
   const removeLoopAt = (templatePath: string) => {
     if (!root) return;
+    if (format !== 'xml') return;
     const loopId = normalizeLoopId(
       templatePath.startsWith('/') ? templatePath : `/${templatePath}`,
     );
@@ -90,6 +94,7 @@ const App = () => {
     xmlPreviewRef,
     xmlGutterRef,
   } = useXmlEditor({
+    format,
     xmlText,
     setXmlText,
     setRoot,
@@ -102,6 +107,8 @@ const App = () => {
   });
 
   const templates = useTemplates({
+    format,
+    setFormat,
     root,
     xmlText,
     fields,
@@ -121,6 +128,7 @@ const App = () => {
   });
 
   const tree = useTree({
+    format,
     root,
     fields,
     loops,
@@ -136,6 +144,7 @@ const App = () => {
   });
 
   const { generateZip } = useGenerate({
+    format,
     root,
     fields,
     loops,
@@ -145,18 +154,37 @@ const App = () => {
     setStatus,
   });
 
+  const detectFormat = (fileNameValue: string, text: string): DataFormat => {
+    const lower = fileNameValue.toLowerCase();
+    if (lower.endsWith('.json')) return 'json';
+    if (lower.endsWith('.xml')) return 'xml';
+    const trimmed = text.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
+    return 'xml';
+  };
+
   const handleFile = async (file: File) => {
     const text = await file.text();
-    const parsed = parseXml(text);
+    const nextFormat = detectFormat(file.name, text);
+    const parsed = nextFormat === 'json' ? parseJson(text) : parseXml(text);
     if (!parsed.ok) {
-      setStatus(t(parsed.errorKey));
+      const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
+      setStatus(`${t(parsed.errorKey)}${detail}`);
       return;
     }
     setStatus('');
+    setFormat(nextFormat);
     setXmlText(text);
     setEditedXml(text);
     setXmlError('');
-    templates.syncFromUpload(file, parsed.root, parsed.fields, parsed.loops, parsed.relations);
+    templates.syncFromUpload(
+      file,
+      nextFormat,
+      parsed.root,
+      parsed.fields,
+      parsed.loops,
+      parsed.relations,
+    );
   };
 
   const exportBackup = () => {
@@ -236,6 +264,7 @@ const App = () => {
         </select>
       </div>
       <UploadHero fileInputRef={fileInputRef} onFile={(file) => void handleFile(file)} />
+      {!root && status && <p className="status">{status}</p>}
 
       <TemplatesPanel
         templateName={templates.templateName}
@@ -255,11 +284,14 @@ const App = () => {
         onLoadTemplate={templates.loadTemplate}
         onRenameTemplate={templates.updateTemplateMeta}
         onDownloadTemplate={(tpl) => {
-          const blob = new Blob([tpl.xmlText], { type: 'application/xml' });
+          const fileFormat = tpl.format ?? 'xml';
+          const mime = fileFormat === 'json' ? 'application/json' : 'application/xml';
+          const ext = fileFormat === 'json' ? 'json' : 'xml';
+          const blob = new Blob([tpl.xmlText], { type: mime });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = tpl.fileName || `${tpl.name}.xml`;
+          link.download = tpl.fileName || `${tpl.name}.${ext}`;
           link.click();
           URL.revokeObjectURL(url);
         }}
@@ -277,6 +309,7 @@ const App = () => {
 
       {root && (
         <TreePanel
+          format={format}
           root={root}
           fileName={fileName}
           treeQuery={tree.treeQuery}

@@ -66,6 +66,9 @@ const GeneratePanel = ({
                       {t('generate.randomChars', { count: field.length })})
                     </>
                   )}
+                  {field.mode === 'random' && field.kind === 'boolean' && (
+                    <>{t('generate.randomBoolean')}</>
+                  )}
                   {field.mode === 'random' && field.kind === 'date' && (
                     <>
                       {t('generate.randomDate')} ({t('generate.randomDays', { days: field.dateSpanDays })})

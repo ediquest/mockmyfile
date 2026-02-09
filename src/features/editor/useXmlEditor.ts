@@ -1,12 +1,15 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
+import type { DataFormat, FieldSetting, LoopSetting, Relation, XmlNode } from '../../core/types';
 import { parseXml } from '../../core/xml/parse';
+import { parseJson } from '../../core/json/parse';
 import { extractLineCol } from '../../core/xml/utils';
 import { collectPaths } from '../../core/xml/tree';
+import { collectJsonPaths } from '../../core/json/tree';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type UseXmlEditorArgs = {
+  format: DataFormat;
   xmlText: string;
   setXmlText: Dispatch<SetStateAction<string>>;
   setRoot: Dispatch<SetStateAction<XmlNode | null>>;
@@ -18,9 +21,13 @@ export type UseXmlEditorArgs = {
   setShowLoopInstances: Dispatch<SetStateAction<boolean>>;
 };
 
-const buildCollapsedMap = (root: XmlNode) => {
+const buildCollapsedMap = (root: XmlNode, format: DataFormat) => {
   const paths: string[] = [];
-  collectPaths(root, `/${root.tag}`, paths);
+  if (format === 'json') {
+    collectJsonPaths(root, `/${root.tag}`, paths);
+  } else {
+    collectPaths(root, `/${root.tag}`, paths);
+  }
   const collapsed: Record<string, boolean> = {};
   paths.forEach((p) => {
     collapsed[p] = false;
@@ -29,6 +36,7 @@ const buildCollapsedMap = (root: XmlNode) => {
 };
 
 const useXmlEditor = ({
+  format,
   xmlText,
   setXmlText,
   setRoot,
@@ -54,22 +62,32 @@ const useXmlEditor = ({
       window.clearTimeout(xmlValidateTimeout.current);
     }
     xmlValidateTimeout.current = window.setTimeout(() => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(editedXml, 'application/xml');
-      const parseError = doc.getElementsByTagName('parsererror')[0];
-      if (parseError) {
-        const details = extractLineCol(parseError.textContent ?? '');
-        if (details?.line && details?.col) {
-          setXmlError(
-            t('error.xmlSyntaxLineCol', { line: details.line, col: details.col }),
-          );
-        } else if (details?.line) {
-          setXmlError(t('error.xmlSyntaxLine', { line: details.line }));
+      if (format === 'xml') {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(editedXml, 'application/xml');
+        const parseError = doc.getElementsByTagName('parsererror')[0];
+        if (parseError) {
+          const details = extractLineCol(parseError.textContent ?? '');
+          if (details?.line && details?.col) {
+            setXmlError(
+              t('error.xmlSyntaxLineCol', { line: details.line, col: details.col }),
+            );
+          } else if (details?.line) {
+            setXmlError(t('error.xmlSyntaxLine', { line: details.line }));
+          } else {
+            setXmlError(t('error.xmlSyntaxGeneric'));
+          }
         } else {
-          setXmlError(t('error.xmlSyntaxGeneric'));
+          setXmlError('');
         }
-      } else {
+        return;
+      }
+
+      try {
+        JSON.parse(editedXml);
         setXmlError('');
+      } catch {
+        setXmlError(t('error.jsonSyntaxGeneric'));
       }
     }, 300);
     return () => {
@@ -77,7 +95,8 @@ const useXmlEditor = ({
         window.clearTimeout(xmlValidateTimeout.current);
       }
     };
-  }, [editedXml, editMode, t]);
+  }, [editedXml, editMode, format, t]);
+
 
   const handleEditToggle = () => {
     if (!editMode) {
@@ -97,9 +116,10 @@ const useXmlEditor = ({
       return;
     }
 
-    const parsed = parseXml(editedXml);
+    const parsed = format === 'json' ? parseJson(editedXml) : parseXml(editedXml);
     if (!parsed.ok) {
-      setStatus(t(parsed.errorKey));
+      const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
+      setStatus(`${t(parsed.errorKey)}${detail}`);
       return;
     }
     setStatus(t('status.changesSaved'));
@@ -108,7 +128,7 @@ const useXmlEditor = ({
     setFields(parsed.fields);
     setLoops(parsed.loops);
     setRelations(parsed.relations);
-    setExpandedMap(buildCollapsedMap(parsed.root));
+    setExpandedMap(buildCollapsedMap(parsed.root, format));
     setShowLoopInstances(false);
     setEditMode(false);
   };

@@ -1,9 +1,11 @@
 import type { ReactNode, RefObject } from 'react';
-import type { XmlNode } from '../../core/types';
+import type { DataFormat, XmlNode } from '../../core/types';
 import { highlightXml } from '../../core/xml/highlight';
+import { highlightJson } from '../../core/json/highlight';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type TreePanelProps = {
+  format: DataFormat;
   root: XmlNode;
   fileName: string;
   treeQuery: string;
@@ -30,6 +32,7 @@ export type TreePanelProps = {
 };
 
 const TreePanel = ({
+  format,
   root,
   fileName,
   treeQuery,
@@ -55,6 +58,8 @@ const TreePanel = ({
   renderNodeEditor,
 }: TreePanelProps) => {
   const { t } = useI18n();
+  const canEditSource = format === 'xml' || format === 'json';
+  const effectiveEditMode = canEditSource && editMode;
 
   return (
     <section className="panel">
@@ -74,9 +79,9 @@ const TreePanel = ({
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
-              disabled={editMode}
+              disabled={effectiveEditMode}
             />
-            {showSuggestions && filteredSuggestions.length > 0 && !editMode && (
+            {showSuggestions && filteredSuggestions.length > 0 && !effectiveEditMode && (
               <div className="search-suggest">
                 {filteredSuggestions.map((item) => (
                   <button
@@ -103,7 +108,7 @@ const TreePanel = ({
                 setTreeQuery('');
                 setShowSuggestions(false);
               }}
-              disabled={editMode}
+              disabled={effectiveEditMode}
             >
               {t('tree.clear')}
             </button>
@@ -111,17 +116,17 @@ const TreePanel = ({
           <button
             className="button ghost"
             onClick={() => setShowLoopInstances(!showLoopInstances)}
-            disabled={editMode}
+            disabled={effectiveEditMode}
           >
             {showLoopInstances ? t('tree.collapseIterations') : t('tree.expandIterations')}
           </button>
-          <button className="button ghost" onClick={expandAll} disabled={editMode}>
+          <button className="button ghost" onClick={expandAll} disabled={effectiveEditMode}>
             {t('tree.expandAll')}
           </button>
-          <button className="button ghost" onClick={collapseAll} disabled={editMode}>
+          <button className="button ghost" onClick={collapseAll} disabled={effectiveEditMode}>
             {t('tree.collapseAll')}
           </button>
-          {editMode && (
+          {canEditSource && editMode && (
             <button
               className="button ghost"
               onClick={() => {
@@ -131,16 +136,18 @@ const TreePanel = ({
               {t('tree.undoChanges')}
             </button>
           )}
-          <button className="button" onClick={handleEditToggle}>
-            {editMode
-              ? editedXml.trim() === xmlText.trim()
-                ? t('tree.close')
-                : t('tree.save')
-              : t('tree.edit')}
-          </button>
+          {canEditSource && (
+            <button className="button" onClick={handleEditToggle}>
+              {editMode
+                ? editedXml.trim() === xmlText.trim()
+                  ? t('tree.close')
+                  : t('tree.save')
+                : t('tree.edit')}
+            </button>
+          )}
         </div>
       </div>
-      {editMode ? (
+      {canEditSource && editMode ? (
         <div className="xml-editor">
           <div className="xml-gutter" ref={xmlGutterRef} aria-hidden="true">
             {Array.from({ length: editedXml.split('\n').length }).map((_, index) => (
@@ -171,7 +178,9 @@ const TreePanel = ({
               ref={xmlPreviewRef}
               className="xml-code"
               aria-hidden="true"
-              dangerouslySetInnerHTML={{ __html: highlightXml(editedXml) }}
+              dangerouslySetInnerHTML={{
+                __html: format === 'json' ? highlightJson(editedXml) : highlightXml(editedXml),
+              }}
             />
           </div>
           {xmlError && <div className="xml-error">{xmlError}</div>}

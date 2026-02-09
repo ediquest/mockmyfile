@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import type {
+  DataFormat,
   FieldSetting,
   LoopSetting,
   Relation,
@@ -22,7 +23,9 @@ import {
 import { normalizeRelation } from '../../core/relations';
 import { useI18n } from '../../i18n/I18nProvider';
 import { parseXml } from '../../core/xml/parse';
+import { parseJson } from '../../core/json/parse';
 import { collectPaths } from '../../core/xml/tree';
+import { collectJsonPaths } from '../../core/json/tree';
 import { getBaseName, normalizeFieldSetting } from '../../core/templates';
 
 const DEFAULT_CATEGORY = 'Ogólne';
@@ -33,6 +36,8 @@ export type TemplatesByProject = {
 };
 
 export type UseTemplatesArgs = {
+  format: DataFormat;
+  setFormat: (value: DataFormat) => void;
   root: XmlNode | null;
   xmlText: string;
   fields: FieldSetting[];
@@ -56,6 +61,7 @@ const normalizeTemplates = (list: TemplatePayload[]) =>
     ...tpl,
     description: tpl.description ?? '',
     category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
+    format: tpl.format ?? 'xml',
   }));
 
 const normalizeCategoriesMap = (map: Record<string, string[]>) => {
@@ -68,9 +74,13 @@ const normalizeCategoriesMap = (map: Record<string, string[]>) => {
   return next;
 };
 
-const buildCollapsedMap = (root: XmlNode) => {
+const buildCollapsedMap = (root: XmlNode, format: DataFormat) => {
   const paths: string[] = [];
-  collectPaths(root, `/${root.tag}`, paths);
+  if (format === 'json') {
+    collectJsonPaths(root, `/${root.tag}`, paths);
+  } else {
+    collectPaths(root, `/${root.tag}`, paths);
+  }
   const collapsed: Record<string, boolean> = {};
   paths.forEach((p) => {
     collapsed[p] = false;
@@ -79,6 +89,8 @@ const buildCollapsedMap = (root: XmlNode) => {
 };
 
 const useTemplates = ({
+  format,
+  setFormat,
   root,
   xmlText,
   fields,
@@ -158,6 +170,7 @@ const useTemplates = ({
       loops,
       relations,
       fileName,
+      format,
     };
     const next = templates.filter((t) => t.id !== id).concat(payload);
     persistTemplates(next);
@@ -179,6 +192,7 @@ const useTemplates = ({
       ...tpl,
       description: tpl.description ?? '',
       category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
+      format: tpl.format ?? 'xml',
     };
     persistLastId(normalized.id);
     setXmlText(normalized.xmlText);
@@ -190,16 +204,24 @@ const useTemplates = ({
     setRelations(normalized.relations.map(normalizeRelation));
     setTemplateName(normalized.name);
     setProjectName(normalized.project || '');
-    const parsed = parseXml(normalized.xmlText);
+    setFormat(normalized.format);
+    const parsed = normalized.format === 'json'
+      ? parseJson(normalized.xmlText)
+      : parseXml(normalized.xmlText);
     if (!parsed.ok) {
-      setStatus(t(parsed.errorKey));
+      const detail = parsed.errorDetail ? ` (${parsed.errorDetail})` : '';
+      setStatus(`${t(parsed.errorKey)}${detail}`);
       return;
     }
     setRoot(parsed.root);
     setStatus(t('status.templateLoaded'));
     setActiveTemplateId(normalized.id);
     const paths: string[] = [];
-    collectPaths(parsed.root, `/${parsed.root.tag}`, paths);
+    if (normalized.format === 'json') {
+      collectJsonPaths(parsed.root, `/${parsed.root.tag}`, paths);
+    } else {
+      collectPaths(parsed.root, `/${parsed.root.tag}`, paths);
+    }
     const stored = localStorage.getItem(getExpandedKey(normalized.id));
     if (stored) {
       try {
@@ -214,7 +236,7 @@ const useTemplates = ({
         // fall through
       }
     }
-    setExpandedMap(buildCollapsedMap(parsed.root));
+    setExpandedMap(buildCollapsedMap(parsed.root, normalized.format));
   };
 
   const deleteTemplate = (id: string) => {
@@ -445,19 +467,21 @@ const useTemplates = ({
 
   const syncFromUpload = (
     file: File,
+    nextFormat: DataFormat,
     parsedRoot: XmlNode,
     nextFields: FieldSetting[],
     nextLoops: LoopSetting[],
     nextRelations: Relation[],
   ) => {
     setFileName(file.name);
+    setFormat(nextFormat);
     setRoot(parsedRoot);
     setFields(nextFields);
     setLoops(nextLoops);
     setRelations(nextRelations);
     setTemplateName(getBaseName(file.name));
     setActiveTemplateId('');
-    setExpandedMap(buildCollapsedMap(parsedRoot));
+    setExpandedMap(buildCollapsedMap(parsedRoot, nextFormat));
   };
 
   return {
