@@ -9,10 +9,12 @@ import type {
 import { NO_PROJECT } from '../../core/constants';
 import {
   clearLastId,
+  getCategories,
   getExpandedKey,
   getLastId,
   getProjects,
   getTemplates,
+  persistCategories,
   persistLastId,
   persistProjects,
   persistTemplates,
@@ -21,6 +23,13 @@ import { normalizeRelation } from '../../core/relations';
 import { parseXml } from '../../core/xml/parse';
 import { collectPaths } from '../../core/xml/tree';
 import { getBaseName, normalizeFieldSetting } from '../../core/templates';
+
+const DEFAULT_CATEGORY = 'Ogólne';
+
+export type TemplatesByProject = {
+  project: string;
+  categories: { category: string; items: TemplatePayload[] }[];
+};
 
 export type UseTemplatesArgs = {
   root: XmlNode | null;
@@ -39,6 +48,23 @@ export type UseTemplatesArgs = {
   setExpandedMap: (value: Record<string, boolean>) => void;
   setEditedXml: (value: string) => void;
   setXmlError: (value: string) => void;
+};
+
+const normalizeTemplates = (list: TemplatePayload[]) =>
+  list.map((tpl) => ({
+    ...tpl,
+    description: tpl.description ?? '',
+    category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
+  }));
+
+const normalizeCategoriesMap = (map: Record<string, string[]>) => {
+  const next: Record<string, string[]> = {};
+  Object.entries(map).forEach(([project, categories]) => {
+    const unique = Array.from(new Set(categories.map((c) => c.trim()).filter(Boolean)));
+    if (!unique.includes(DEFAULT_CATEGORY)) unique.unshift(DEFAULT_CATEGORY);
+    next[project] = unique;
+  });
+  return next;
 };
 
 const buildCollapsedMap = (root: XmlNode) => {
@@ -70,13 +96,18 @@ const useTemplates = ({
   setXmlError,
 }: UseTemplatesArgs) => {
   const [templateName, setTemplateName] = useState('');
-  const [templates, setTemplateList] = useState<TemplatePayload[]>(getTemplates());
+  const [templates, setTemplateList] = useState<TemplatePayload[]>(
+    normalizeTemplates(getTemplates()),
+  );
   const [projects, setProjects] = useState<string[]>(getProjects());
   const [projectName, setProjectName] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [newProject, setNewProject] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [activeTemplateId, setActiveTemplateId] = useState<string>('');
+  const [categoriesMap, setCategoriesMap] = useState<Record<string, string[]>>(
+    normalizeCategoriesMap(getCategories()),
+  );
 
   useEffect(() => {
     const lastId = getLastId();
@@ -87,14 +118,39 @@ const useTemplates = ({
     }
   }, []);
 
+  useEffect(() => {
+    const fromTemplates: Record<string, string[]> = {};
+    for (const tpl of templates) {
+      const projectKey = tpl.project?.trim() ? tpl.project.trim() : NO_PROJECT;
+      const categoryKey = tpl.category?.trim() ? tpl.category.trim() : DEFAULT_CATEGORY;
+      if (!fromTemplates[projectKey]) fromTemplates[projectKey] = [];
+      fromTemplates[projectKey].push(categoryKey);
+    }
+    const merged: Record<string, string[]> = { ...categoriesMap };
+    Object.entries(fromTemplates).forEach(([project, cats]) => {
+      const existing = merged[project] ?? [];
+      merged[project] = Array.from(new Set([...existing, ...cats]));
+    });
+    const normalized = normalizeCategoriesMap(merged);
+    const before = JSON.stringify(categoriesMap);
+    const after = JSON.stringify(normalized);
+    if (before !== after) {
+      setCategoriesMap(normalized);
+      persistCategories(normalized);
+    }
+  }, [templates]);
+
   const saveTemplate = () => {
     if (!root) return;
     const trimmedProject = projectName.trim();
     const id = templateName.trim() || `template-${Date.now()}`;
+    const existing = templates.find((tpl) => tpl.id === id);
     const payload: TemplatePayload = {
       id,
       name: templateName.trim() || id,
+      description: existing?.description ?? '',
       project: trimmedProject,
+      category: existing?.category ?? DEFAULT_CATEGORY,
       xmlText,
       fields,
       loops,
@@ -111,29 +167,37 @@ const useTemplates = ({
       setProjects(updated);
       persistProjects(updated);
     }
+    if (trimmedProject) {
+      addCategory(trimmedProject, existing?.category ?? DEFAULT_CATEGORY);
+    }
   };
 
   const loadTemplate = (tpl: TemplatePayload) => {
-    setXmlText(tpl.xmlText);
-    setEditedXml(tpl.xmlText);
+    const normalized = {
+      ...tpl,
+      description: tpl.description ?? '',
+      category: tpl.category?.trim() ? tpl.category : DEFAULT_CATEGORY,
+    };
+    setXmlText(normalized.xmlText);
+    setEditedXml(normalized.xmlText);
     setXmlError('');
-    setFileName(tpl.fileName);
-    setFields(tpl.fields.map(normalizeFieldSetting));
-    setLoops(tpl.loops);
-    setRelations(tpl.relations.map(normalizeRelation));
-    setTemplateName(tpl.name);
-    setProjectName(tpl.project || '');
-    const parsed = parseXml(tpl.xmlText);
+    setFileName(normalized.fileName);
+    setFields(normalized.fields.map(normalizeFieldSetting));
+    setLoops(normalized.loops);
+    setRelations(normalized.relations.map(normalizeRelation));
+    setTemplateName(normalized.name);
+    setProjectName(normalized.project || '');
+    const parsed = parseXml(normalized.xmlText);
     if (!parsed.ok) {
       setStatus(parsed.error);
       return;
     }
     setRoot(parsed.root);
     setStatus('Szablon wczytany.');
-    setActiveTemplateId(tpl.id);
+    setActiveTemplateId(normalized.id);
     const paths: string[] = [];
     collectPaths(parsed.root, `/${parsed.root.tag}`, paths);
-    const stored = localStorage.getItem(getExpandedKey(tpl.id));
+    const stored = localStorage.getItem(getExpandedKey(normalized.id));
     if (stored) {
       try {
         const parsedStored = JSON.parse(stored) as Record<string, boolean>;
@@ -179,6 +243,85 @@ const useTemplates = ({
     }
   };
 
+  const updateTemplateMeta = (
+    id: string,
+    patch: { name?: string; description?: string; project?: string; category?: string },
+  ) => {
+    const next = templates.map((tpl) =>
+      tpl.id === id
+        ? {
+            ...tpl,
+            name: patch.name?.trim() || tpl.name,
+            description: patch.description ?? tpl.description ?? '',
+            project: patch.project ?? tpl.project,
+            category:
+              patch.category?.trim() || tpl.category?.trim() || DEFAULT_CATEGORY,
+          }
+        : tpl,
+    );
+    persistTemplates(next);
+    setTemplateList(next);
+    if (activeTemplateId === id) {
+      if (patch.name && patch.name.trim()) {
+        setTemplateName(patch.name.trim());
+      }
+      if (patch.project !== undefined) {
+        setProjectName(patch.project);
+      }
+    }
+  };
+
+  const addCategory = (project: string, category: string) => {
+    const projectKey = project?.trim() ? project.trim() : NO_PROJECT;
+    const trimmed = category.trim();
+    if (!trimmed) return;
+    const existing = categoriesMap[projectKey] ?? [DEFAULT_CATEGORY];
+    if (existing.includes(trimmed)) return;
+    const next = {
+      ...categoriesMap,
+      [projectKey]: normalizeCategoriesMap({ [projectKey]: [...existing, trimmed] })[projectKey],
+    };
+    setCategoriesMap(next);
+    persistCategories(next);
+  };
+
+  const renameCategory = (project: string, from: string, to: string) => {
+    const projectKey = project?.trim() ? project.trim() : NO_PROJECT;
+    const nextName = to.trim();
+    if (!nextName) return;
+    if (from === DEFAULT_CATEGORY) return;
+
+    const updatedTemplates = templates.map((tpl) =>
+      tpl.project?.trim() === projectKey && tpl.category === from
+        ? { ...tpl, category: nextName }
+        : tpl,
+    );
+    persistTemplates(updatedTemplates);
+    setTemplateList(updatedTemplates);
+
+    const existing = categoriesMap[projectKey] ?? [DEFAULT_CATEGORY];
+    const nextCategories = existing.map((c) => (c === from ? nextName : c));
+    const next = {
+      ...categoriesMap,
+      [projectKey]: normalizeCategoriesMap({ [projectKey]: nextCategories })[projectKey],
+    };
+    setCategoriesMap(next);
+    persistCategories(next);
+  };
+
+  const deleteCategory = (project: string, category: string) => {
+    if (category === DEFAULT_CATEGORY) return;
+    const projectKey = project?.trim() ? project.trim() : NO_PROJECT;
+    const existing = categoriesMap[projectKey] ?? [DEFAULT_CATEGORY];
+    const nextCategories = existing.filter((c) => c !== category);
+    const next = {
+      ...categoriesMap,
+      [projectKey]: normalizeCategoriesMap({ [projectKey]: nextCategories })[projectKey],
+    };
+    setCategoriesMap(next);
+    persistCategories(next);
+  };
+
   const addProject = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -187,6 +330,7 @@ const useTemplates = ({
       setProjects(updated);
       persistProjects(updated);
     }
+    addCategory(trimmed, DEFAULT_CATEGORY);
   };
 
   const visibleTemplates = templates
@@ -207,16 +351,44 @@ const useTemplates = ({
   }, [templates]);
 
   const templatesByProject = useMemo(() => {
-    const map = new Map<string, TemplatePayload[]>();
-    for (const tpl of visibleTemplates) {
-      const key = tpl.project?.trim() ? tpl.project.trim() : NO_PROJECT;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(tpl);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [visibleTemplates]);
+    const templateMap = new Map<string, Map<string, TemplatePayload[]>>();
+    const projectKeys = new Set<string>();
 
-  const syncFromUpload = (file: File, parsedRoot: XmlNode, nextFields: FieldSetting[], nextLoops: LoopSetting[], nextRelations: Relation[]) => {
+    for (const tpl of visibleTemplates) {
+      const projectKey = tpl.project?.trim() ? tpl.project.trim() : NO_PROJECT;
+      const categoryKey = tpl.category?.trim() ? tpl.category.trim() : DEFAULT_CATEGORY;
+      projectKeys.add(projectKey);
+      if (!templateMap.has(projectKey)) templateMap.set(projectKey, new Map());
+      const categoryMap = templateMap.get(projectKey)!;
+      if (!categoryMap.has(categoryKey)) categoryMap.set(categoryKey, []);
+      categoryMap.get(categoryKey)!.push(tpl);
+    }
+
+    Object.keys(categoriesMap).forEach((key) => projectKeys.add(key));
+
+    return Array.from(projectKeys)
+      .sort((a, b) => a.localeCompare(b))
+      .map((project) => {
+        const categoryMap = templateMap.get(project) ?? new Map();
+        const categories = categoriesMap[project] ?? [DEFAULT_CATEGORY];
+        const categoryEntries = categories.map((category) => ({
+          category,
+          items: categoryMap.get(category) ?? [],
+        }));
+        return {
+          project,
+          categories: categoryEntries,
+        };
+      });
+  }, [visibleTemplates, categoriesMap]);
+
+  const syncFromUpload = (
+    file: File,
+    parsedRoot: XmlNode,
+    nextFields: FieldSetting[],
+    nextLoops: LoopSetting[],
+    nextRelations: Relation[],
+  ) => {
     setFileName(file.name);
     setRoot(parsedRoot);
     setFields(nextFields);
@@ -248,14 +420,17 @@ const useTemplates = ({
     loadTemplate,
     deleteTemplate,
     moveTemplateToProject,
+    updateTemplateMeta,
     addProject,
+    addCategory,
+    renameCategory,
+    deleteCategory,
     templatesByProject,
     projectStats,
     visibleTemplates,
     syncFromUpload,
+    defaultCategory: DEFAULT_CATEGORY,
   };
 };
 
 export default useTemplates;
-
-

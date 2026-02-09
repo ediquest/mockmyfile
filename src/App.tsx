@@ -183,7 +183,13 @@ const App = () => {
         templates?: typeof templates.templates;
         projects?: string[];
       };
-      const nextTemplates = Array.isArray(parsed.templates) ? parsed.templates : [];
+      const nextTemplates = Array.isArray(parsed.templates)
+        ? parsed.templates.map((tpl) => ({
+            ...tpl,
+            description: tpl.description ?? '',
+            category: tpl.category ?? 'Ogólne',
+          }))
+        : [];
       const nextProjects = Array.isArray(parsed.projects) ? parsed.projects : [];
       persistTemplates(nextTemplates);
       persistProjects(nextProjects);
@@ -230,9 +236,22 @@ const App = () => {
         setExpandedProjects={templates.setExpandedProjects}
         onSaveTemplate={templates.saveTemplate}
         onLoadTemplate={templates.loadTemplate}
+        onRenameTemplate={templates.updateTemplateMeta}
+        onDownloadTemplate={(tpl) => {
+          const blob = new Blob([tpl.xmlText], { type: 'application/xml' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = tpl.fileName || `${tpl.name}.xml`;
+          link.click();
+          URL.revokeObjectURL(url);
+        }}
         onDeleteTemplate={templates.deleteTemplate}
-        onMoveTemplateToProject={templates.moveTemplateToProject}
         onAddProject={templates.addProject}
+        onAddCategory={templates.addCategory}
+        onRenameCategory={templates.renameCategory}
+        onDeleteCategory={templates.deleteCategory}
+        defaultCategory={templates.defaultCategory}
         hasRoot={!!root}
         templatesCount={templates.templates.length}
       />

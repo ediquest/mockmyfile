@@ -47,7 +47,9 @@ export type Relation = {
 export type TemplatePayload = {
   id: string;
   name: string;
+  description: string;
   project: string;
+  category: string;
   xmlText: string;
   fields: FieldSetting[];
   loops: LoopSetting[];
@@ -64,4 +66,3 @@ export type ParseResult =
       loops: LoopSetting[];
       relations: Relation[];
     };
-
