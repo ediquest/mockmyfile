@@ -24,10 +24,10 @@ export type UseTreeArgs = {
   removeLoopAt: (templatePath: string) => void;
 };
 
-const getAllowedModes = (kind: FieldKind) => {
-  if (kind === 'boolean') return ['same', 'fixed', 'random'] as const;
-  if (kind === 'null') return ['same'] as const;
-  return ['same', 'fixed', 'increment', 'random'] as const;
+const getAllowedModes = (kind: FieldKind): FieldSetting['mode'][] => {
+  if (kind === 'boolean') return ['same', 'fixed', 'random'];
+  if (kind === 'null') return ['same'];
+  return ['same', 'fixed', 'increment', 'random'];
 };
 
 const useTree = ({
@@ -141,7 +141,7 @@ const useTree = ({
     const relation = relationByDependent.get(field.id);
     const locked = Boolean(relation);
     const allowedModes = getAllowedModes(field.kind);
-    const mode = allowedModes.includes(field.mode as (typeof allowedModes)[number])
+    const mode = allowedModes.includes(field.mode)
       ? field.mode
       : 'same';
 

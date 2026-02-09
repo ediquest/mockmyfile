@@ -12,8 +12,6 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 const LANG_STORAGE_KEY = 'messagelab.lang';
 
-const normalizeLang = (value: string | null): Lang => (value === 'en' ? 'en' : 'pl');
-
 const detectLang = (): Lang => {
   if (typeof window === 'undefined') return 'pl';
   const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
@@ -36,7 +34,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
   const t = useMemo(() => {
     const dict = translations[lang];
     return (key: I18nKey, vars?: Record<string, string | number>) => {
-      let text = dict[key] ?? translations.pl[key] ?? String(key);
+      let text: string = dict[key] ?? translations.pl[key] ?? String(key);
       if (vars) {
         Object.entries(vars).forEach(([token, value]) => {
           text = text.replaceAll(`{${token}}`, String(value));

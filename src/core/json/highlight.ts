@@ -3,7 +3,7 @@ import { escapeHtml } from '../xml/escape';
 export const highlightJson = (json: string) => {
   const escaped = escapeHtml(json);
   return escaped
-    .replace(/(&quot;.*?&quot;)(\s*:)?/g, (match, p1, p2) => {
+    .replace(/(&quot;.*?&quot;)(\s*:)?/g, (_match, p1, p2) => {
       if (p2) {
         return `<span class="json-key">${p1}</span>${p2}`;
       }

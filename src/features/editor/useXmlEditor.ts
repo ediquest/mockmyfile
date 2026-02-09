@@ -148,7 +148,7 @@ const useXmlEditor = ({
     setLoops(parsed.loops);
     setRelations(parsed.relations);
     setExpandedMap(buildCollapsedMap(parsed.root, format));
-    if (format === 'csv' && 'delimiter' in parsed) {
+    if (format === 'csv' && parsed.ok && 'delimiter' in parsed && typeof parsed.delimiter === 'string') {
       setCsvDelimiter(parsed.delimiter);
     }
     setShowLoopInstances(false);
