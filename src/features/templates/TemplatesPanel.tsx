@@ -32,6 +32,12 @@ export type TemplatesPanelProps = {
   onDeleteTemplate: (id: string) => void;
   presetsByTemplate: Record<string, Preset[]>;
   onApplyPreset: (templateId: string, presetId: string) => void;
+  onDeletePreset: (templateId: string, presetId: string) => void;
+  onUpdatePreset: (
+    templateId: string,
+    presetId: string,
+    patch: { name?: string; description?: string },
+  ) => void;
   onAddProject: (project: string) => void;
   onRenameProject: (from: string, to: string) => void;
   onAddCategory: (project: string, category: string) => void;
@@ -64,6 +70,8 @@ const TemplatesPanel = ({
   onDeleteTemplate,
   presetsByTemplate,
   onApplyPreset,
+  onDeletePreset,
+  onUpdatePreset,
   onAddProject,
   onRenameProject,
   onAddCategory,
@@ -93,6 +101,12 @@ const TemplatesPanel = ({
   const [blockedDeleteProject, setBlockedDeleteProject] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
   const [presetTemplateId, setPresetTemplateId] = useState<string | null>(null);
+  const [editPresetInfo, setEditPresetInfo] = useState<{ templateId: string; preset: Preset } | null>(null);
+  const [editPresetName, setEditPresetName] = useState('');
+  const [editPresetDescription, setEditPresetDescription] = useState('');
+  const [confirmDeletePreset, setConfirmDeletePreset] = useState<{ templateId: string; presetId: string } | null>(
+    null,
+  );
   const originalRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const lastSavedRef = useRef<{ name: string; description: string; project: string; category: string } | null>(null);
   const saveTimeoutRef = useRef<number | null>(null);
@@ -424,6 +438,7 @@ const TemplatesPanel = ({
                             {items.map((tpl) => {
                               const isEditing = editingId === tpl.id;
                               const categoryList = getCategoriesForProject(project);
+                              const presetCount = (presetsByTemplate[tpl.id] ?? []).length;
                               return (
                                 <div className="template-card" key={tpl.id}>
                                   <div className="template-meta">
@@ -525,12 +540,20 @@ const TemplatesPanel = ({
                                         >
                                           {t('templates.load')}
                                         </button>
-                                        <button
-                                          className="button ghost"
-                                          onClick={() => setPresetTemplateId(tpl.id)}
-                                        >
-                                          {t('presets.manage')}
-                                        </button>
+                                        {presetCount > 0 && (
+                                          <button
+                                            className="button ghost"
+                                            onClick={() => setPresetTemplateId(tpl.id)}
+                                          >
+                                            {t('presets.manage')}
+                                            <span
+                                              className="preset-count"
+                                              aria-label={t('presets.count', { count: presetCount })}
+                                            >
+                                              {presetCount}
+                                            </span>
+                                          </button>
+                                        )}
                                         <button
                                           className="button ghost"
                                           onClick={() => onDownloadTemplate(tpl)}
@@ -781,6 +804,9 @@ const TemplatesPanel = ({
                 <div key={preset.id} className="template-item">
                   <div>
                     <strong>{preset.name}</strong>
+                    {preset.description?.trim() && (
+                      <p className="preset-description">{preset.description}</p>
+                    )}
                     <span>{new Date(preset.createdAt).toLocaleString()}</span>
                   </div>
                   <div className="row-actions compact">
@@ -793,6 +819,26 @@ const TemplatesPanel = ({
                     >
                       {t('presets.apply')}
                     </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title={t('presets.edit')}
+                      onClick={() => {
+                        setEditPresetInfo({ templateId: presetTemplateId, preset });
+                        setEditPresetName(preset.name);
+                        setEditPresetDescription(preset.description ?? '');
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      title={t('presets.delete')}
+                      onClick={() => setConfirmDeletePreset({ templateId: presetTemplateId, presetId: preset.id })}
+                    >
+                      🗑
+                    </button>
                   </div>
                 </div>
               ))}
@@ -804,6 +850,65 @@ const TemplatesPanel = ({
             </div>
           </>,
           () => setPresetTemplateId(null),
+        )}
+      {editPresetInfo &&
+        renderModal(
+          <>
+            <h3>{t('presets.editTitle')}</h3>
+            <input
+              className="input"
+              value={editPresetName}
+              onChange={(e) => setEditPresetName(e.target.value)}
+            />
+            <input
+              className="input"
+              value={editPresetDescription}
+              placeholder={t('presets.descriptionPlaceholder')}
+              onChange={(e) => setEditPresetDescription(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setEditPresetInfo(null)}>
+                {t('templates.modalCancel')}
+              </button>
+              <button
+                className="button"
+                onClick={() => {
+                  const trimmed = editPresetName.trim();
+                  if (!trimmed) return;
+                  onUpdatePreset(editPresetInfo.templateId, editPresetInfo.preset.id, {
+                    name: trimmed,
+                    description: editPresetDescription.trim(),
+                  });
+                  setEditPresetInfo(null);
+                }}
+              >
+                {t('templates.modalSave')}
+              </button>
+            </div>
+          </>,
+          () => setEditPresetInfo(null),
+        )}
+      {confirmDeletePreset &&
+        renderModal(
+          <>
+            <h3>{t('presets.deleteConfirmTitle')}</h3>
+            <p>{t('presets.deleteConfirmMessage')}</p>
+            <div className="modal-actions">
+              <button className="button ghost" onClick={() => setConfirmDeletePreset(null)}>
+                {t('templates.modalCancel')}
+              </button>
+              <button
+                className="button danger"
+                onClick={() => {
+                  onDeletePreset(confirmDeletePreset.templateId, confirmDeletePreset.presetId);
+                  setConfirmDeletePreset(null);
+                }}
+              >
+                {t('templates.modalDelete')}
+              </button>
+            </div>
+          </>,
+          () => setConfirmDeletePreset(null),
         )}
     </section>
   );

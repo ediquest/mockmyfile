@@ -12,7 +12,7 @@ export type GeneratePanelProps = {
   updateField: (id: string, patch: Partial<FieldSetting>) => void;
   presets: Preset[];
   canSavePreset: boolean;
-  onSavePreset: (name: string) => void;
+  onSavePreset: (name: string, description: string) => void;
   onApplyPreset: (presetId: string) => void;
   onDeletePreset: (presetId: string) => void;
 };
@@ -32,6 +32,7 @@ const GeneratePanel = ({
 }: GeneratePanelProps) => {
   const { t } = useI18n();
   const [presetName, setPresetName] = useState('');
+  const [presetDescription, setPresetDescription] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('');
   const [confirmDeletePreset, setConfirmDeletePreset] = useState<string | null>(null);
   const statusText = status
@@ -65,13 +66,21 @@ const GeneratePanel = ({
             onChange={(e) => setPresetName(e.target.value)}
             disabled={!canSavePreset}
           />
+          <input
+            className="input"
+            placeholder={t('presets.descriptionPlaceholder')}
+            value={presetDescription}
+            onChange={(e) => setPresetDescription(e.target.value)}
+            disabled={!canSavePreset}
+          />
           <button
             className="button ghost"
             onClick={() => {
               const trimmed = presetName.trim();
               if (!trimmed) return;
-              onSavePreset(trimmed);
+              onSavePreset(trimmed, presetDescription);
               setPresetName('');
+              setPresetDescription('');
             }}
             disabled={!canSavePreset}
           >

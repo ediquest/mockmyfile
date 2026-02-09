@@ -9,6 +9,7 @@ import {
   getPresetsForTemplate,
   getPresetsMap,
   savePresetForTemplate,
+  updatePresetForTemplate,
   type Preset,
 } from './core/presets';
 import { applyLoopMarker, clearLoopMarker } from './core/xml/tree';
@@ -218,13 +219,15 @@ const App = () => {
     pendingPresetRef.current = null;
   }, [templates.activeTemplateId, fields, loops, relations]);
 
-  const handleSavePreset = (name: string) => {
+  const handleSavePreset = (name: string, description: string) => {
     if (!templates.activeTemplateId) return;
     const trimmed = name.trim();
     if (!trimmed) return;
+    const trimmedDescription = description.trim();
     const preset: Preset = {
       id: `preset-${Date.now()}`,
       name: trimmed,
+      description: trimmedDescription,
       createdAt: new Date().toISOString(),
       fields: fields
         .filter((field) => field.mode !== 'same')
@@ -270,6 +273,15 @@ const App = () => {
 
   const handleDeletePreset = (templateId: string, presetId: string) => {
     deletePresetForTemplate(templateId, presetId);
+    setPresetsVersion((v) => v + 1);
+  };
+
+  const handleUpdatePreset = (
+    templateId: string,
+    presetId: string,
+    patch: { name?: string; description?: string },
+  ) => {
+    updatePresetForTemplate(templateId, presetId, patch);
     setPresetsVersion((v) => v + 1);
   };
 
@@ -424,6 +436,8 @@ const App = () => {
         onDeleteTemplate={templates.deleteTemplate}
         presetsByTemplate={presetsMap}
         onApplyPreset={handleApplyPreset}
+        onDeletePreset={handleDeletePreset}
+        onUpdatePreset={handleUpdatePreset}
         onAddProject={templates.addProject}
         onDeleteProject={templates.deleteProject}
         onRenameProject={templates.renameProject}

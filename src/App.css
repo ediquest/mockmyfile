@@ -571,16 +571,39 @@ select {
 .template-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding: 12px 16px;
   border-radius: 16px;
   background: #f8fafc;
+}
+
+.preset-description {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #475569;
 }
 
 .template-item span {
   display: block;
   font-size: 12px;
   color: #64748b;
+}
+
+.preset-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  background: #eef2ff;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .row-actions {

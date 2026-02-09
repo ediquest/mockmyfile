@@ -12,6 +12,7 @@ export type PresetRelation = Pick<Relation, 'id' | 'enabled' | 'prefix' | 'suffi
 export type Preset = {
   id: string;
   name: string;
+  description?: string;
   createdAt: string;
   fields: PresetField[];
   loops: PresetLoop[];
@@ -52,6 +53,19 @@ export const savePresetForTemplate = (templateId: string, preset: Preset) => {
 export const deletePresetForTemplate = (templateId: string, presetId: string) => {
   const map = readPresets();
   const next = (map[templateId] ?? []).filter((p) => p.id !== presetId);
+  map[templateId] = next;
+  writePresets(map);
+};
+
+export const updatePresetForTemplate = (
+  templateId: string,
+  presetId: string,
+  patch: { name?: string; description?: string },
+) => {
+  const map = readPresets();
+  const next = (map[templateId] ?? []).map((preset) =>
+    preset.id === presetId ? { ...preset, ...patch } : preset,
+  );
   map[templateId] = next;
   writePresets(map);
 };
