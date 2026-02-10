@@ -2,7 +2,16 @@ import type { FieldSetting, LoopSetting, Relation } from './types';
 
 export type PresetField = Pick<
   FieldSetting,
-  'id' | 'mode' | 'fixedValue' | 'step' | 'min' | 'max' | 'length' | 'dateSpanDays'
+  | 'id'
+  | 'mode'
+  | 'fixedValue'
+  | 'step'
+  | 'min'
+  | 'max'
+  | 'length'
+  | 'dateSpanDays'
+  | 'listText'
+  | 'listScope'
 >;
 
 export type PresetLoop = Pick<LoopSetting, 'id' | 'count'>;

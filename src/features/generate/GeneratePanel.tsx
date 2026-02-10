@@ -136,6 +136,16 @@ const GeneratePanel = ({
                   {field.mode === 'fixed' && t('generate.fixedValue', { value: field.fixedValue })}
                   {field.mode === 'increment' &&
                     t('generate.increment', { step: field.step })}
+                  {field.mode === 'list' &&
+                    t('generate.listValues', {
+                      count: field.listText
+                        .split(/\r\n|\n|\r/)
+                        .filter((line) => line.trim().length > 0).length,
+                      scope:
+                        field.listScope === 'global'
+                          ? t('field.listScope.global')
+                          : t('field.listScope.perFile'),
+                    })}
                   {field.mode === 'random' && field.kind === 'number' && (
                     <>
                       {t('generate.randomNumber')}

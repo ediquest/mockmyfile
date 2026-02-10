@@ -23,6 +23,8 @@ export const createFieldSetting = (
     length: Math.max(value.length, 6),
     dateSpanDays: 30,
     fixedValue: value,
+    listText: '',
+    listScope: 'perFile',
   };
 };
 
@@ -42,6 +44,8 @@ export const normalizeFieldSetting = (field: FieldSetting): FieldSetting => {
     length: Number.isFinite(field.length) ? field.length : Math.max(field.value.length, 6),
     dateSpanDays: Number.isFinite(field.dateSpanDays) ? field.dateSpanDays : 30,
     fixedValue: field.fixedValue ?? field.value,
+    listText: field.listText ?? '',
+    listScope: field.listScope ?? 'perFile',
   };
 };
 

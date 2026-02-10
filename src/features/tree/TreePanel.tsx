@@ -3,6 +3,9 @@ import type { DataFormat, XmlNode } from '../../core/types';
 import { highlightXml } from '../../core/xml/highlight';
 import { highlightJson } from '../../core/json/highlight';
 import { highlightCsv } from '../../core/csv/highlight';
+import { formatXml } from '../../core/xml/format';
+import { formatJson } from '../../core/json/format';
+import { formatCsv } from '../../core/csv/format';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type TreePanelProps = {
@@ -61,6 +64,13 @@ const TreePanel = ({
   const { t } = useI18n();
   const canEditSource = format === 'xml' || format === 'json' || format === 'csv';
   const effectiveEditMode = canEditSource && editMode;
+  const normalizedSourceText = (() => {
+    if (xmlText.includes('\n')) return xmlText;
+    if (format === 'xml') return formatXml(xmlText);
+    if (format === 'json') return formatJson(xmlText);
+    if (format === 'csv') return formatCsv(xmlText);
+    return xmlText;
+  })();
 
   return (
     <section className="panel">
@@ -131,7 +141,7 @@ const TreePanel = ({
             <button
               className="button ghost"
               onClick={() => {
-                setEditedXml(xmlText);
+                setEditedXml(normalizedSourceText);
               }}
             >
               {t('tree.undoChanges')}

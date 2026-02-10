@@ -4,9 +4,10 @@ import { useI18n } from '../../i18n/I18nProvider';
 export type LoopsPanelProps = {
   loops: LoopSetting[];
   updateLoop: (id: string, count: number) => void;
+  focusLoop: (id: string) => void;
 };
 
-const LoopsPanel = ({ loops, updateLoop }: LoopsPanelProps) => {
+const LoopsPanel = ({ loops, updateLoop, focusLoop }: LoopsPanelProps) => {
   const { t } = useI18n();
 
   return (
@@ -14,13 +15,27 @@ const LoopsPanel = ({ loops, updateLoop }: LoopsPanelProps) => {
       <h2>{t('loops.title')}</h2>
       {loops.length === 0 && <p className="muted">{t('loops.empty')}</p>}
       {loops.map((loop) => (
-        <div className="field-row" key={loop.id}>
+        <div
+          className="field-row"
+          key={loop.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => focusLoop(loop.id)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              focusLoop(loop.id);
+            }
+          }}
+        >
           <label>{loop.label}</label>
           <input
             type="number"
             min={1}
             className="input"
             value={loop.count}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
             onChange={(e) => updateLoop(loop.id, Number(e.target.value) || 1)}
           />
         </div>

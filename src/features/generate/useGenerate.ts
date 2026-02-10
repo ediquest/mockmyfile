@@ -61,6 +61,76 @@ const useGenerate = ({
   const getFieldEntry = (templatePath: string) =>
     fieldMap.get(templatePath) ?? fieldMap.get(stripLoopMarkers(templatePath));
 
+  const parseListValues = (text: string) =>
+    text
+      .split(/\r\n|\n|\r/)
+      .map((line) => line)
+      .filter((line) => line.trim().length > 0);
+
+  const getLoopSpan = (loopIndexMap: Record<string, number>) => {
+    const loopIds = Object.keys(loopIndexMap).sort();
+    if (loopIds.length === 0) return 1;
+    return loopIds.reduce((acc, loopId) => acc * (loopCountMap.get(loopId) ?? 1), 1);
+  };
+
+  const getLocalIndex = (loopIndexMap: Record<string, number>) => {
+    const loopIds = Object.keys(loopIndexMap).sort();
+    if (loopIds.length === 0) return 0;
+    let multiplier = 1;
+    let index = 0;
+    for (const loopId of loopIds) {
+      const count = loopCountMap.get(loopId) ?? 1;
+      const value = loopIndexMap[loopId] ?? 0;
+      index += value * multiplier;
+      multiplier *= count;
+    }
+    return index;
+  };
+
+  const getGlobalIndex = (fileIndex: number, loopIndexMap: Record<string, number>) => {
+    const span = getLoopSpan(loopIndexMap);
+    const localIndex = getLocalIndex(loopIndexMap);
+    return fileIndex * span + localIndex;
+  };
+
+  const getListIndex = (
+    field: FieldSetting,
+    fileIndex: number,
+    loopIndexMap: Record<string, number>,
+  ) => {
+    if (field.listScope === 'global') {
+      return getGlobalIndex(fileIndex, loopIndexMap);
+    }
+    if (Object.keys(loopIndexMap).length > 0) {
+      return getLocalIndex(loopIndexMap);
+    }
+    return fileIndex;
+  };
+
+  const getFieldLoopMultiplier = (fieldId: string) => {
+    let multiplier = 1;
+    for (const [loopId, count] of loopCountMap.entries()) {
+      const normalizedLoopId = normalizeId(loopId);
+      const loopMarker = `${normalizedLoopId}[]`;
+      if (
+        fieldId.includes(loopMarker)
+        || fieldId.includes(loopId)
+        || fieldId.startsWith(`${normalizedLoopId}/`)
+        || fieldId.startsWith(`${loopMarker}/`)
+      ) {
+        multiplier *= count;
+      }
+    }
+    return multiplier;
+  };
+
+  const getRequiredListCount = (field: FieldSetting) => {
+    const multiplier = getFieldLoopMultiplier(field.id);
+    if (multiplier <= 1) return filesToGenerate;
+    if (field.listScope === 'global') return filesToGenerate * multiplier;
+    return multiplier;
+  };
+
   const resolveValue = (
     templateId: string,
     fileIndex: number,
@@ -91,6 +161,21 @@ const useGenerate = ({
       let value = field.value.toLowerCase() === 'false' ? 'false' : 'true';
       if (field.mode === 'fixed') {
         value = field.fixedValue.toLowerCase() === 'false' ? 'false' : 'true';
+      } else if (field.mode === 'list') {
+        const values = parseListValues(field.listText);
+        const index = getListIndex(field, fileIndex, loopIndexMap);
+        if (index >= values.length) {
+          const required = getRequiredListCount(field);
+          throw new Error(
+            t('status.listTooShort', {
+              field: field.label,
+              count: required,
+              size: values.length,
+            }),
+          );
+        }
+        const picked = values[index] ?? '';
+        value = picked.toLowerCase() === 'false' ? 'false' : 'true';
       } else if (field.mode === 'random') {
         value = Math.random() < 0.5 ? 'true' : 'false';
       }
@@ -98,7 +183,6 @@ const useGenerate = ({
       return value;
     }
 
-    const indexOffset = fileIndex + Object.values(loopIndexMap).reduce((a, b) => a + b, 0);
     const usedSet = (() => {
       if (!usedValues.has(field.id)) {
         usedValues.set(field.id, new Set<string>());
@@ -148,7 +232,22 @@ const useGenerate = ({
     let value = field.value;
     if (field.mode === 'fixed') {
       value = field.fixedValue;
+    } else if (field.mode === 'list') {
+      const values = parseListValues(field.listText);
+      const index = getListIndex(field, fileIndex, loopIndexMap);
+      if (index >= values.length) {
+        const required = getRequiredListCount(field);
+        throw new Error(
+          t('status.listTooShort', {
+            field: field.label,
+            count: required,
+            size: values.length,
+          }),
+        );
+      }
+      value = values[index] ?? '';
     } else if (field.mode === 'increment') {
+      const indexOffset = getGlobalIndex(fileIndex, loopIndexMap);
       if (field.kind === 'number') {
         const base = Number(field.value) || 0;
         value = String(base + field.step * indexOffset);
@@ -351,6 +450,20 @@ const useGenerate = ({
       const zip = new JSZip();
       const baseName = getBaseName(fileName || 'message');
       const usedValues = new Map<string, Set<string>>();
+      const listFields = fields.filter((field) => field.mode === 'list');
+      for (const field of listFields) {
+        const values = parseListValues(field.listText);
+        const required = getRequiredListCount(field);
+        if (values.length < required) {
+          throw new Error(
+            t('status.listTooShort', {
+              field: field.label,
+              count: required,
+              size: values.length,
+            }),
+          );
+        }
+      }
       if (format === 'csv') {
         const csv = buildCsv(filesToGenerate, csvDelimiter, usedValues);
         const fileLabel = `${baseName}_generated.csv`;

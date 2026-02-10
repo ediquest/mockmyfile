@@ -25,9 +25,9 @@ export type UseTreeArgs = {
 };
 
 const getAllowedModes = (kind: FieldKind): FieldSetting['mode'][] => {
-  if (kind === 'boolean') return ['same', 'fixed', 'random'];
+  if (kind === 'boolean') return ['same', 'fixed', 'random', 'list'];
   if (kind === 'null') return ['same'];
-  return ['same', 'fixed', 'increment', 'random'];
+  return ['same', 'fixed', 'increment', 'random', 'list'];
 };
 
 const useTree = ({
@@ -95,6 +95,20 @@ const useTree = ({
     fieldMap.get(templatePath) ?? fieldMap.get(stripLoopMarkers(templatePath));
 
   const isJsonLike = format === 'json' || format === 'csv';
+
+  const changedPaths = useMemo(() => {
+    const set = new Set<string>();
+    fields.forEach((field) => {
+      if (field.mode === 'same') return;
+      const attrIdx = field.id.indexOf('/@');
+      const base = (attrIdx >= 0 ? field.id.slice(0, attrIdx) : field.id)
+        .replace(/\[\d+\]/g, '[]')
+        .replace(/^\//, '');
+      if (base) set.add(base);
+    });
+    return set;
+  }, [fields]);
+
 
   const getChildPath = (node: XmlNode, path: string, child: XmlNode) => {
     if (isJsonLike && node.jsonType === 'array') return `${path}[]`;
@@ -164,6 +178,7 @@ const useTree = ({
                 {item === 'fixed' && t('field.mode.fixed')}
                 {item === 'increment' && t('field.mode.increment')}
                 {item === 'random' && t('field.mode.random')}
+                {item === 'list' && t('field.mode.list')}
               </option>
             ))}
           </select>
@@ -263,6 +278,29 @@ const useTree = ({
             />
           </label>
         )}
+        {mode === 'list' && (
+          <label>
+            {t('field.listValues')}
+            <textarea
+              className="input textarea"
+              value={field.listText}
+              disabled={locked}
+              onChange={(e) => updateField(field.id, { listText: e.target.value })}
+              placeholder={t('field.listPlaceholder')}
+            />
+            <select
+              className="input"
+              value={field.listScope}
+              disabled={locked}
+              onChange={(e) =>
+                updateField(field.id, { listScope: e.target.value as FieldSetting['listScope'] })
+              }
+            >
+              <option value="perFile">{t('field.listScope.perFile')}</option>
+              <option value="global">{t('field.listScope.global')}</option>
+            </select>
+          </label>
+        )}
       </div>
     );
   };
@@ -328,7 +366,7 @@ const useTree = ({
         <div
           role="button"
           tabIndex={0}
-          className="tree-line"
+          className={`tree-line${changedPaths.has(templatePath) ? ' configured' : ''}`}
           onClick={() =>
             setExpandedMap((prev) => {
               const next = { ...prev, [templatePath]: !isExpanded };
@@ -373,10 +411,30 @@ const useTree = ({
                   className="tree-action"
                   onClick={(event) => {
                     event.stopPropagation();
+                    adjustLoopCount(loopKey, 10);
+                  }}
+                >
+                  +10
+                </button>
+                <button
+                  type="button"
+                  className="tree-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
                     adjustLoopCount(loopKey, -1);
                   }}
                 >
                   -1
+                </button>
+                <button
+                  type="button"
+                  className="tree-action"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    adjustLoopCount(loopKey, -10);
+                  }}
+                >
+                  -10
                 </button>
                 {format === 'xml' && (
                   <button
@@ -540,6 +598,25 @@ const useTree = ({
     });
   };
 
+  const focusLoop = (loopId: string) => {
+    const base = normalizeId(stripLoopMarkers(loopId));
+    if (!base) return;
+    expandPath(base);
+    requestAnimationFrame(() => {
+      const direct = document.querySelector(`[data-path="${base}"]`);
+      if (direct) {
+        setHighlightPath(base);
+        direct.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      const withLoop = document.querySelector(`[data-path="${base}[]"]`);
+      if (withLoop) {
+        setHighlightPath(`${base}[]`);
+        withLoop.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  };
+
   return {
     treeQuery,
     setTreeQuery,
@@ -552,6 +629,7 @@ const useTree = ({
     collapseAll,
     focusPath,
     focusRelation,
+    focusLoop,
   };
 };
 

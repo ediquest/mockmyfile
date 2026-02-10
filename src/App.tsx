@@ -219,6 +219,48 @@ const App = () => {
     pendingPresetRef.current = null;
   }, [templates.activeTemplateId, fields, loops, relations]);
 
+  useEffect(() => {
+    const listFields = fields.filter((field) => field.mode === 'list' && field.listScope === 'global');
+    if (listFields.length === 0) return;
+    const getListLength = (value: string) =>
+      value.split(/\r\n|\n|\r/).filter((line) => line.trim().length > 0).length;
+    const getLoopIdForField = (fieldId: string) => {
+      const lastIdx = fieldId.lastIndexOf('[]');
+      if (lastIdx < 0) return null;
+      const raw = fieldId.slice(0, lastIdx + 2);
+      const candidates = [
+        normalizeLoopId(`/${raw}`),
+        normalizeLoopId(raw),
+        `/${raw}`,
+        raw,
+      ];
+      const match = loops.find((loop) => candidates.includes(loop.id));
+      return match?.id ?? null;
+    };
+    const desired = new Map<string, number>();
+    for (const field of listFields) {
+      const loopId = getLoopIdForField(field.id);
+      if (!loopId) continue;
+      const listLength = getListLength(field.listText);
+      const nextCount = listLength <= 0 ? 0 : Math.ceil(listLength / Math.max(1, filesToGenerate));
+      const current = desired.get(loopId);
+      if (current === undefined || nextCount > current) {
+        desired.set(loopId, nextCount);
+      }
+    }
+    if (desired.size === 0) return;
+    setLoops((prev) => {
+      let changed = false;
+      const next = prev.map((loop) => {
+        const target = desired.get(loop.id);
+        if (target === undefined || target === loop.count) return loop;
+        changed = true;
+        return { ...loop, count: target };
+      });
+      return changed ? next : prev;
+    });
+  }, [fields, loops, filesToGenerate]);
+
   const handleSavePreset = (name: string, description: string) => {
     if (!templates.activeTemplateId) return;
     const trimmed = name.trim();
@@ -235,6 +277,8 @@ const App = () => {
           id: field.id,
           mode: field.mode,
           fixedValue: field.fixedValue,
+          listText: field.listText,
+          listScope: field.listScope,
           step: field.step,
           min: field.min,
           max: field.max,
@@ -480,12 +524,12 @@ const App = () => {
 
       {root && (
         <section className="panel grid">
-          <LoopsPanel loops={loops} updateLoop={updateLoop} />
           <RelationsPanel
             relations={relations}
             updateRelation={updateRelation}
             focusRelation={tree.focusRelation}
           />
+          <LoopsPanel loops={loops} updateLoop={updateLoop} focusLoop={tree.focusLoop} />
         </section>
       )}
 

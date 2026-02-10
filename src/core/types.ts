@@ -21,7 +21,9 @@ export type XmlNode = {
 
 export type FieldKind = 'text' | 'number' | 'date' | 'boolean' | 'null';
 
-export type FieldMode = 'same' | 'increment' | 'random' | 'fixed';
+export type FieldMode = 'same' | 'increment' | 'random' | 'fixed' | 'list';
+
+export type ListScope = 'perFile' | 'global';
 
 export type FieldSetting = {
   id: string;
@@ -35,6 +37,8 @@ export type FieldSetting = {
   length: number;
   dateSpanDays: number;
   fixedValue: string;
+  listText: string;
+  listScope: ListScope;
 };
 
 export type LoopSetting = {

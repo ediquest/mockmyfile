@@ -7,6 +7,9 @@ import { parseCsv } from '../../core/csv/parse';
 import { extractLineCol } from '../../core/xml/utils';
 import { collectPaths } from '../../core/xml/tree';
 import { collectJsonPaths } from '../../core/json/tree';
+import { formatXml } from '../../core/xml/format';
+import { formatJson } from '../../core/json/format';
+import { formatCsv } from '../../core/csv/format';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type UseXmlEditorArgs = {
@@ -58,6 +61,31 @@ const useXmlEditor = ({
   const xmlPreviewRef = useRef<HTMLPreElement | null>(null);
   const xmlGutterRef = useRef<HTMLDivElement | null>(null);
   const xmlValidateTimeout = useRef<number | null>(null);
+
+  const getEditableXmlText = (value: string) => {
+    if (format !== 'xml') return value;
+    if (value.includes('\n')) return value;
+    return formatXml(value);
+  };
+
+  const getEditableJsonText = (value: string) => {
+    if (format !== 'json') return value;
+    if (value.includes('\n')) return value;
+    return formatJson(value);
+  };
+
+  const getEditableCsvText = (value: string) => {
+    if (format !== 'csv') return value;
+    if (value.includes('\n')) return value;
+    return formatCsv(value);
+  };
+
+  const getEditableText = (value: string) => {
+    if (format === 'xml') return getEditableXmlText(value);
+    if (format === 'json') return getEditableJsonText(value);
+    if (format === 'csv') return getEditableCsvText(value);
+    return value;
+  };
 
   useEffect(() => {
     if (!editMode) return;
@@ -115,7 +143,7 @@ const useXmlEditor = ({
 
   const handleEditToggle = () => {
     if (!editMode) {
-      setEditedXml(xmlText);
+      setEditedXml(getEditableText(xmlText));
       setXmlError('');
       setEditMode(true);
       return;

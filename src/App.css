@@ -469,14 +469,19 @@ select {
 }
 
 .textarea {
-  width: 100%;
-  min-height: 64px;
+  width: 200%;
+  min-height: 128px;
   resize: vertical;
 }
 
 .textarea.read-only {
   background: #f8fafc;
   color: #64748b;
+}
+
+.template-card .textarea {
+  width: 100%;
+  min-height: 64px;
 }
 
 .template-actions-left {
@@ -896,6 +901,15 @@ select {
 
 .tree-line:hover {
   background: #e2e8f0;
+}
+
+.tree-line.configured {
+  background: #e0f2fe;
+  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.25);
+}
+
+.tree-line.configured:hover {
+  background: #bae6fd;
 }
 
 .tree-toggle {
