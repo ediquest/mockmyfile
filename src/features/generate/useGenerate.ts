@@ -247,7 +247,7 @@ const useGenerate = ({
       }
       value = values[index] ?? '';
     } else if (field.mode === 'increment') {
-      const indexOffset = getGlobalIndex(fileIndex, loopIndexMap);
+      const indexOffset = getGlobalIndex(fileIndex, loopIndexMap) + 1;
       if (field.kind === 'number') {
         const base = Number(field.value) || 0;
         value = String(base + field.step * indexOffset);
